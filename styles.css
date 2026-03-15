@@ -522,7 +522,10 @@ tbody tr:last-child td {
     background: rgba(255,255,255, 0.06);
 }
 .refresh-now-btn.spinning svg {
-    animation: spin 0.6s linear;
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    100% { transform: rotate(360deg); }
 }
 
 /* Skeleton loading shimmer */
