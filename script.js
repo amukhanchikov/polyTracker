@@ -185,6 +185,10 @@ function resolveCategory(conditionId, title) {
 
 // Show skeleton loading placeholder
 function showSkeleton() {
+    // Preserve height to prevent scroll jumping
+    const currentHeight = tableWrapper.offsetHeight;
+    if (currentHeight > 100) tableWrapper.style.minHeight = currentHeight + 'px';
+    
     const cols = 6;
     let html = `<table class="positions-table"><thead><tr>
         <th>Market</th><th>Cur. Price</th><th>Weight (%)</th><th>1h % Δ</th><th>24h % Δ</th><th>Value (USDC)</th>
@@ -259,6 +263,7 @@ async function analyzeWallet(address) {
                     const li = document.createElement('li');
                     li.className = 'trade-item';
                     const isBuy = t.side === 'BUY';
+                    const tradePrice = t.price ? (parseFloat(t.price) * 100).toFixed(1) + '¢' : '';
                     
                     li.innerHTML = `
                         <div class="trade-icon ${isBuy ? 'buy' : 'sell'}">
@@ -267,9 +272,10 @@ async function analyzeWallet(address) {
                         <div class="trade-details">
                             <div class="top">
                                 <span>${isBuy ? 'Bought' : 'Sold'}</span>
-                                <span class="outcome-badge ${t.outcome ? t.outcome.toLowerCase() : ''}">${t.outcome}</span>
+                                <span class="outcome-badge ${t.outcome ? t.outcome.toLowerCase() : ''}">${t.outcome} ${tradePrice}</span>
                                 <span>for</span>
                                 <strong>${formatCurrency(t.usdcSize)}</strong>
+                                <span class="trade-time">${formatTime(t.timestamp)}</span>
                             </div>
                             <div class="market">${t.title}</div>
                         </div>
@@ -638,7 +644,11 @@ saveCategoryBtn.addEventListener('click', () => {
     for (let p of currentPositionsData) {
         p.category = resolveCategory(p.conditionId, p.title);
     }
-    renderTable();
+
+    // Wrap in setTimeout to decouple from modal closing cycle and prevent "drifting" feel
+    setTimeout(() => {
+        renderTable();
+    }, 10);
 });
 
 categoryModal.addEventListener('click', (e) => {
@@ -661,6 +671,10 @@ function calculateTotalVal() {
 }
 
 function renderTable() {
+    // Preserve height to prevent scroll jumping
+    const currentHeight = tableWrapper.offsetHeight;
+    if (currentHeight > 100) tableWrapper.style.minHeight = currentHeight + 'px';
+    
     tableWrapper.innerHTML = '';
 
     const isGrouped = groupToggle.checked;
@@ -858,7 +872,15 @@ function renderTable() {
         tableWrapper.innerHTML += `<div class="empty-state"><i data-lucide="inbox" style="width:32px;height:32px;opacity:0.3"></i><p>No open positions found</p></div>`;
     }
 
-    lucide.createIcons({ attrs: {}, nameAttr: 'data-lucide', nodes: [tableWrapper] });
+    // Use requestAnimationFrame to ensure layout is ready and minimize "drifting" feel
+    requestAnimationFrame(() => {
+        lucide.createIcons({ attrs: {}, nameAttr: 'data-lucide', nodes: [tableWrapper] });
+        
+        // Use an additional frame to ensure icons are painted before clearing minHeight
+        requestAnimationFrame(() => {
+            tableWrapper.style.minHeight = '';
+        });
+    });
 }
 
 // Auto-run on load for demo address or saved wallet
