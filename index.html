@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolyTracker | Premium Portfolio Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="icon" type="image/png" href="favicon.png">
+</head>
+<body>
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i data-lucide="layers"></i>
+                <h1>PolyTracker</h1>
+            </div>
+            <div class="search-bar">
+                <i data-lucide="search"></i>
+                <input type="text" id="wallet-input" placeholder="Enter Polymarket Proxy Wallet (0x...)">
+                <button id="search-btn">Analyze</button>
+            </div>
+        </header>
+
+        <main>
+            <div id="loading" class="hidden">
+                <div class="spinner"></div>
+                <p>Syncing on-chain data...</p>
+            </div>
+
+            <div id="dashboard" class="hidden">
+                <!-- Data Overview Cards -->
+                <section class="overview-grid">
+                    <div class="glass-card stat-card">
+                        <div class="stat-header">
+                            <i data-lucide="briefcase"></i>
+                            <h3>Total Portfolio Value</h3>
+                        </div>
+                        <div class="stat-value" id="total-value">$0.00</div>
+                    </div>
+                    
+                    <div class="glass-card stat-card">
+                        <div class="stat-header">
+                            <i data-lucide="trending-up"></i>
+                            <h3>Total PnL</h3>
+                        </div>
+                        <div class="stat-value" id="total-pnl">$0.00</div>
+                    </div>
+
+                    <div class="glass-card stat-card">
+                        <div class="stat-header">
+                            <i data-lucide="bar-chart-2"></i>
+                            <h3>24h Portfolio Δ</h3>
+                        </div>
+                        <div class="stat-value" id="total-24h-change">$0.00</div>
+                    </div>
+
+                    <div class="glass-card stat-card">
+                        <div class="stat-header">
+                            <i data-lucide="activity"></i>
+                            <h3>Net 24h Flow</h3>
+                        </div>
+                        <div class="stat-value" id="net-flow">$0.00</div>
+                    </div>
+                </section>
+
+                <div class="content-grid">
+                    <!-- Positions Table -->
+                    <section class="glass-card table-section">
+                        <div class="table-controls">
+                            <h2>
+                                Open Positions <span id="position-count">0</span>
+                            </h2>
+                            <div class="table-controls-right">
+                                <div class="position-search-wrap">
+                                    <i data-lucide="search" style="width:14px;height:14px;opacity:0.5"></i>
+                                    <input type="text" id="position-search" placeholder="Filter markets... (/)">
+                                    <button id="clear-search" class="clear-search-btn" title="Clear filter">×</button>
+                                </div>
+                                <div class="auto-refresh-wrap">
+                                    <button id="refresh-now-btn" class="refresh-now-btn" title="Refresh now">
+                                        <i data-lucide="refresh-cw" style="width:14px;height:14px"></i>
+                                    </button>
+                                    <select id="auto-refresh-select">
+                                        <option value="0">Manual</option>
+                                        <option value="60">1 min</option>
+                                        <option value="300">5 min</option>
+                                        <option value="900">15 min</option>
+                                    </select>
+                                    <span id="refresh-countdown"></span>
+                                </div>
+                                <div class="view-toggle">
+                                    <label class="switch-label">Group by Category
+                                        <input type="checkbox" id="group-toggle">
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="table-wrapper">
+                            <!-- Table will be generated by JS -->
+                        </div>
+                    </section>
+                    
+                    <!-- 24h Activity Summaries -->
+                    <section class="glass-card activity-section">
+                        <div class="section-header">
+                            <h2>24h Activity Rollup</h2>
+                        </div>
+                        <div class="activity-summary">
+                            <div class="activity-row">
+                                <span class="label">Gross Spent (BUYS)</span>
+                                <span class="value negative" id="gross-spent">-$0.00</span>
+                            </div>
+                            <div class="activity-row">
+                                <span class="label">Gross Received (SELLS)</span>
+                                <span class="value positive" id="gross-received">+$0.00</span>
+                            </div>
+                            <div class="activity-row">
+                                <span class="label">Gross Redeemed</span>
+                                <span class="value positive" id="gross-redeemed">+$0.00</span>
+                            </div>
+                            <div class="divider"></div>
+                            <div class="activity-row total">
+                                <span class="label">Net Liquidity Flow</span>
+                                <span class="value" id="net-liquidity">$0.00</span>
+                            </div>
+                        </div>
+                        <div class="recent-trades">
+                            <h3>Latest Trades</h3>
+                            <ul id="trades-list">
+                                <!-- Populated by JS -->
+                            </ul>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Category Edit Modal -->
+    <div id="category-modal" class="modal hidden">
+        <div class="modal-content glass-card">
+            <h3>Assign Category</h3>
+            <p id="modal-market-title" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;"></p>
+            <div class="category-input-wrap">
+                <input type="text" id="category-input" placeholder="e.g., Trump, AI, Oil...">
+                <button id="clear-category-input" class="clear-input-btn" title="Clear input">×</button>
+            </div>
+            <div id="category-tags-cloud" class="tags-cloud"></div>
+            <div class="modal-actions">
+                <button id="cancel-category" class="btn-cancel">Cancel</button>
+                <button id="save-category" class="btn-primary">Save Category</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
