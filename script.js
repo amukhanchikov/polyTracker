@@ -96,7 +96,7 @@ function createThrottledFetcher(concurrency = 5) {
     };
 }
 
-const throttle = createThrottledFetcher(5);
+const throttle = createThrottledFetcher(15);
 
 // Fetch Historical Metrics from CLOB (with retry on 429)
 async function getHistoricalMetrics(assetId) {
@@ -212,6 +212,80 @@ async function analyzeWallet(address) {
     tradesList.innerHTML = '';
 
     try {
+        // 2. Fetch Activity (Parallelized)
+        const fetchActivity = async () => {
+            try {
+                const actRes = await fetch(`https://data-api.polymarket.com/activity?user=${address}&limit=200`);
+                if (!actRes.ok) return null;
+                const activities = await actRes.json();
+                const cutoff = (Date.now() / 1000) - (24 * 3600);
+                const recent = activities.filter(a => a.timestamp >= cutoff);
+                
+                const trades = recent.filter(a => a.type === 'TRADE');
+                const redeems = recent.filter(a => a.type === 'REDEEM');
+
+                let localGrossSpent = 0;
+                let localGrossReceived = 0;
+                let localGrossRedeemed = 0;
+
+                trades.forEach(t => {
+                    if (t.side === 'BUY') localGrossSpent += (t.usdcSize || 0);
+                    if (t.side === 'SELL') localGrossReceived += (t.usdcSize || 0);
+                });
+
+                redeems.forEach(r => {
+                    localGrossRedeemed += (r.usdcValue || r.usdcSize || 0);
+                });
+
+                const netLiquidity = (localGrossReceived + localGrossRedeemed) - localGrossSpent;
+
+                // UI Updates
+                grossSpentEl.innerText = `-${formatCurrency(localGrossSpent)}`;
+                grossReceivedEl.innerText = `+${formatCurrency(localGrossReceived)}`;
+                grossRedeemedEl.innerText = `+${formatCurrency(localGrossRedeemed)}`;
+                
+                const netFlowEl = document.getElementById('net-flow');
+                
+                document.getElementById('net-liquidity').className = `value ${netLiquidity >= 0 ? 'positive' : 'negative'}`;
+                document.getElementById('net-liquidity').innerText = `${netLiquidity > 0 ? '+' : ''}${formatCurrency(netLiquidity)}`;
+                
+                netFlowEl.className = `stat-value ${netLiquidity >= 0 ? 'positive' : 'negative'}`;
+                netFlowEl.innerText = `${netLiquidity > 0 ? '+' : ''}${formatCurrency(netLiquidity)}`;
+
+                // Render Recent Trades Fragment
+                const tFrag = document.createDocumentFragment();
+                tradesList.innerHTML = ''; // Clear skeleton if any
+                trades.slice(0, 10).forEach(t => {
+                    const li = document.createElement('li');
+                    li.className = 'trade-item';
+                    const isBuy = t.side === 'BUY';
+                    
+                    li.innerHTML = `
+                        <div class="trade-icon ${isBuy ? 'buy' : 'sell'}">
+                            <i data-lucide="${isBuy ? 'arrow-down-left' : 'arrow-up-right'}"></i>
+                        </div>
+                        <div class="trade-details">
+                            <div class="top">
+                                <span>${isBuy ? 'Bought' : 'Sold'}</span>
+                                <span class="outcome-badge ${t.outcome ? t.outcome.toLowerCase() : ''}">${t.outcome}</span>
+                                <span>for</span>
+                                <strong>${formatCurrency(t.usdcSize)}</strong>
+                            </div>
+                            <div class="market">${t.title}</div>
+                        </div>
+                    `;
+                    tFrag.appendChild(li);
+                });
+                tradesList.appendChild(tFrag);
+                lucide.createIcons({ attrs: {}, nameAttr: 'data-lucide', nodes: [tradesList] });
+            } catch(e) {
+                console.error('Activity fetch failed', e);
+            }
+        };
+
+        // Start both fetches in parallel
+        const activityPromise = fetchActivity();
+
         // 1. Fetch Positions
         const posRes = await fetch(`https://data-api.polymarket.com/positions?user=${address}`);
         if (!posRes.ok) throw new Error("Failed to fetch positions");
@@ -293,70 +367,8 @@ async function analyzeWallet(address) {
         total24hChangeEl.innerText = `${totChange24h > 0 ? '+' : ''}${formatCurrency(totChange24h)}`;
 
 
-        // 2. Fetch Activity
-        const actRes = await fetch(`https://data-api.polymarket.com/activity?user=${address}&limit=200`);
-        if(actRes.ok) {
-            const activities = await actRes.json();
-            const cutoff = (Date.now() / 1000) - (24 * 3600);
-            const recent = activities.filter(a => a.timestamp >= cutoff);
-            
-            const trades = recent.filter(a => a.type === 'TRADE');
-            const redeems = recent.filter(a => a.type === 'REDEEM');
-
-            let grossSpent = 0;
-            let grossReceived = 0;
-            let grossRedeemed = 0;
-
-            trades.forEach(t => {
-                if (t.side === 'BUY') grossSpent += (t.usdcSize || 0);
-                if (t.side === 'SELL') grossReceived += (t.usdcSize || 0);
-            });
-
-            redeems.forEach(r => {
-                grossRedeemed += (r.usdcValue || r.usdcSize || 0);
-            });
-
-            const netLiquidity = (grossReceived + grossRedeemed) - grossSpent;
-
-            // Update Activity Totals
-            grossSpentEl.innerText = `-${formatCurrency(grossSpent)}`;
-            grossReceivedEl.innerText = `+${formatCurrency(grossReceived)}`;
-            grossRedeemedEl.innerText = `+${formatCurrency(grossRedeemed)}`;
-            
-            const netFlowEl = document.getElementById('net-flow');
-            
-            document.getElementById('net-liquidity').className = `value ${netLiquidity >= 0 ? 'positive' : 'negative'}`;
-            document.getElementById('net-liquidity').innerText = `${netLiquidity > 0 ? '+' : ''}${formatCurrency(netLiquidity)}`;
-            
-            netFlowEl.className = `stat-value ${netLiquidity >= 0 ? 'positive' : 'negative'}`;
-            netFlowEl.innerText = `${netLiquidity > 0 ? '+' : ''}${formatCurrency(netLiquidity)}`;
-
-            // Render Recent Trades Fragment
-            const tFrag = document.createDocumentFragment();
-            trades.slice(0, 10).forEach(t => {
-                const li = document.createElement('li');
-                li.className = 'trade-item';
-                const isBuy = t.side === 'BUY';
-                
-                li.innerHTML = `
-                    <div class="trade-icon ${isBuy ? 'buy' : 'sell'}">
-                        <i data-lucide="${isBuy ? 'arrow-down-left' : 'arrow-up-right'}"></i>
-                    </div>
-                    <div class="trade-details">
-                        <div class="top">
-                            <span>${isBuy ? 'Bought' : 'Sold'}</span>
-                            <span class="outcome-badge ${t.outcome ? t.outcome.toLowerCase() : ''}">${t.outcome}</span>
-                            <span>for</span>
-                            <strong>${formatCurrency(t.usdcSize)}</strong>
-                        </div>
-                        <div class="market">${t.title}</div>
-                    </div>
-                `;
-                tFrag.appendChild(li);
-            });
-            tradesList.appendChild(tFrag);
-            lucide.createIcons({ attrs: {}, nameAttr: 'data-lucide', nodes: [tradesList] });
-        }
+        // Wait for activity to finish if needed for final state (though UI updates progressively)
+        await activityPromise;
 
     } catch (e) {
         showToast('Error fetching data. Ensure the wallet address is correct.', 'error');
