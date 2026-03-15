@@ -51,6 +51,7 @@ const ICON_MAP = {
     'crypto': 'bitcoin',
     'bitcoin': 'bitcoin',
     'ai': 'cpu',
+    'sport': 'trophy',
     'sports': 'trophy',
     'economy': 'trending-up',
     'geopolitics': 'globe'
@@ -306,16 +307,65 @@ async function analyzeWallet(address) {
         let totalVal = 0;
         let totalPnl = 0;
 
-        // Fetch price histories concurrently (main bottleneck — uses sessionStorage cache)
-        let positionRowsData = await Promise.all(positions.map(async p => {
-            // Check sessionStorage cache for price history
-            const cacheKey = 'ph_' + p.asset;
+        // Refactor: Process basic position data instantly and render
+        let positionRowsData = positions.map(p => {
+            const categoryObj = resolveCategory(p.conditionId, p.title || '');
+            const curPrice = (p.currentValue || 0) / parseFloat(p.size || 1);
+            const entryPrice = parseFloat(p.avgPrice || 0);
+            const roi = entryPrice > 0 ? ((curPrice - entryPrice) / entryPrice) * 100 : 0;
+            const marketUrl = p.eventSlug 
+                ? `https://polymarket.com/event/${p.eventSlug}` 
+                : (p.slug ? `https://polymarket.com/event/${p.slug}` : null);
+
+            return { 
+                ...p, 
+                pctChange24h: null,
+                histPrice: null,
+                histTime: null,
+                pctChange1h: null,
+                hist1hPrice: null,
+                hist1hTime: null,
+                curPrice: curPrice,
+                roi: roi,
+                category: categoryObj,
+                marketUrl: marketUrl
+            };
+        });
+        
+        currentPositionsData = positionRowsData;
+        const updateTotalsAndRender = () => {
+            const { totV, totP, totChange24h } = calculateTotalVal();
+            currentPositionsData.forEach(p => {
+                p.weight = totV > 0 ? ((p.currentValue || 0) / totV) * 100 : 0;
+            });
+
+            renderTable();
+
+            totalValueEl.innerText = formatCurrency(totV);
+            totalPnlEl.className = `stat-value ${totP >= 0 ? 'positive' : 'negative'}`;
+            totalPnlEl.innerText = formatCurrency(totP);
+            
+            const total24hChangeEl = document.getElementById('total-24h-change');
+            total24hChangeEl.className = `stat-value ${totChange24h >= 0 ? 'positive' : 'negative'}`;
+            total24hChangeEl.innerText = `${totChange24h > 0 ? '+' : ''}${formatCurrency(totChange24h)}`;
+        };
+
+        // Render immediately with current values
+        updateTotalsAndRender();
+
+        let renderTimeout = null;
+
+        // Background load historical metrics
+        const refreshBtn = document.getElementById('refresh-now-btn');
+        if (refreshBtn) refreshBtn.classList.add('spinning');
+
+        Promise.all(currentPositionsData.map(async p => {
+            const cacheKey = 'polytracker_ph_' + p.asset;
             let histData = null;
             try {
-                const cached = sessionStorage.getItem(cacheKey);
+                const cached = localStorage.getItem(cacheKey);
                 if (cached) {
                     const parsed = JSON.parse(cached);
-                    // Cache valid for 5 minutes
                     if (Date.now() - parsed._ts < 300000) histData = parsed;
                 }
             } catch(e) {}
@@ -323,54 +373,30 @@ async function analyzeWallet(address) {
             if (!histData) {
                 histData = await throttle(() => getHistoricalMetrics(p.asset));
                 if (histData) {
-                    try { sessionStorage.setItem(cacheKey, JSON.stringify({ ...histData, _ts: Date.now() })); } catch(e) {}
+                    try { localStorage.setItem(cacheKey, JSON.stringify({ ...histData, _ts: Date.now() })); } catch(e) {}
                 }
             }
             
-            // Category from title (instant, no API call)
-            const categoryObj = resolveCategory(p.conditionId, p.title || '');
-            const curPrice = (p.currentValue || 0) / parseFloat(p.size || 1);
-            const entryPrice = parseFloat(p.avgPrice || 0);
-            const roi = entryPrice > 0 ? ((curPrice - entryPrice) / entryPrice) * 100 : 0;
+            if (histData) {
+                p.histPrice = histData.price24h;
+                p.histTime = histData.time24h;
+                p.hist1hPrice = histData.price1h;
+                p.hist1hTime = histData.time1h;
 
-            // Build Polymarket URL from position data
-            const marketUrl = p.eventSlug 
-                ? `https://polymarket.com/event/${p.eventSlug}` 
-                : (p.slug ? `https://polymarket.com/event/${p.slug}` : null);
-
-            return { 
-                ...p, 
-                pctChange24h: histData ? histData.pct24h : null,
-                histPrice: histData ? histData.price24h : null,
-                histTime: histData ? histData.time24h : null,
-                pctChange1h: histData ? histData.pct1h : null,
-                hist1hPrice: histData ? histData.price1h : null,
-                hist1hTime: histData ? histData.time1h : null,
-                curPrice: curPrice,
-                roi: roi,
-                category: categoryObj,
-                marketUrl: marketUrl
-            };
-        }));
-        
-        // Calculate Totals First to get weights
-        currentPositionsData = positionRowsData;
-        const { totV, totP, totChange24h } = calculateTotalVal();
-
-        // Assign weights
-        currentPositionsData.forEach(p => {
-            p.weight = totV > 0 ? ((p.currentValue || 0) / totV) * 100 : 0;
+                if (histData.price24h > 0) {
+                    p.pctChange24h = ((p.curPrice - histData.price24h) / histData.price24h) * 100;
+                }
+                if (histData.price1h > 0) {
+                    p.pctChange1h = ((p.curPrice - histData.price1h) / histData.price1h) * 100;
+                }
+                
+                // Re-render minimally, debounced to avoid layout thrashing
+                if (renderTimeout) clearTimeout(renderTimeout);
+                renderTimeout = setTimeout(updateTotalsAndRender, 150);
+            }
+        })).catch(console.error).finally(() => {
+            if (refreshBtn) refreshBtn.classList.remove('spinning');
         });
-
-        renderTable();
-
-        totalValueEl.innerText = formatCurrency(totV);
-        totalPnlEl.className = `stat-value ${totP >= 0 ? 'positive' : 'negative'}`;
-        totalPnlEl.innerText = formatCurrency(totP);
-        
-        const total24hChangeEl = document.getElementById('total-24h-change');
-        total24hChangeEl.className = `stat-value ${totChange24h >= 0 ? 'positive' : 'negative'}`;
-        total24hChangeEl.innerText = `${totChange24h > 0 ? '+' : ''}${formatCurrency(totChange24h)}`;
 
 
         // Wait for activity to finish if needed for final state (though UI updates progressively)
