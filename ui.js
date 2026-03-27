@@ -1,5 +1,22 @@
 import { formatCurrency, formatPct, escapeHtml, SORT_NULL_VALUE } from './utils.js';
 
+function generateSparklineSVG(prices, pctChange) {
+    if (!prices || prices.length < 2) return '';
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = max - min || 0.0001;
+    const W = 64, H = 22;
+    const pts = prices.map((p, i) => {
+        const x = (i / (prices.length - 1)) * W;
+        const y = H - ((p - min) / range) * H;
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    const color = pctChange === null ? 'var(--text-muted)' : pctChange >= 0 ? 'var(--positive)' : 'var(--negative)';
+    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" class="sparkline" aria-hidden="true">
+        <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+    </svg>`;
+}
+
 export function showSkeleton(tableWrapper) {
     // Preserve height to prevent scroll jumping
     const currentHeight = tableWrapper.offsetHeight;
@@ -74,6 +91,7 @@ function generateRowTemplate(p) {
                         <div class="market-details">
                             <span class="outcome-inline-badge ${isYesNo ? outcomeClass : ''}">${escapeHtml(p.outcome) || '-'} ${entryCents}</span>
                             <span>${formattedShares}</span>
+                            ${generateSparklineSVG(p.sparkline, p.pctChange24h)}
                         </div>
                     </div>
                 </div>

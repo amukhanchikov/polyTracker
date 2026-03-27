@@ -276,6 +276,13 @@ input:checked + .slider:before {
     font-weight: 500;
 }
 
+.last-updated {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    opacity: 0.6;
+    white-space: nowrap;
+}
+
 
 /* ===========================
    TOAST NOTIFICATION

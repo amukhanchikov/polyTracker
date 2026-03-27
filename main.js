@@ -43,8 +43,28 @@ const state = {
     sortAsc: localStorage.getItem('polytracker_sortAsc') === 'true',
     expandedCategories: JSON.parse(localStorage.getItem('polytracker_expanded') || '{}'),
     searchFilter: '',
-    abortController: null,  // For cancelling in-flight requests
+    abortController: null,
+    lastUpdated: null,
+    freeUsdc: null,
 };
+
+const lastUpdatedEl = document.getElementById('last-updated');
+
+function formatLastUpdated(ts) {
+    if (!ts) return '';
+    const sec = Math.floor((Date.now() - ts) / 1000);
+    if (sec < 10) return 'Updated just now';
+    if (sec < 60) return `Updated ${sec}s ago`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `Updated ${min}m ago`;
+    return `Updated ${Math.floor(min / 60)}h ago`;
+}
+
+setInterval(() => {
+    if (lastUpdatedEl && state.lastUpdated) {
+        lastUpdatedEl.textContent = formatLastUpdated(state.lastUpdated);
+    }
+}, 5000);
 
 // Helper to trigger UI render with full state
 function dispatchRender() {
@@ -190,16 +210,18 @@ async function analyzeWallet(address) {
                 p.histTime = histData.time24h;
                 p.hist1hPrice = histData.price1h;
                 p.hist1hTime = histData.time1h;
+                p.sparkline = histData.sparkline || null;
 
-                if (histData.price24h > 0) {
-                    p.pctChange24h = ((p.curPrice - histData.price24h) / histData.price24h) * 100;
-                }
-                if (histData.price1h > 0) {
-                    p.pctChange1h = ((p.curPrice - histData.price1h) / histData.price1h) * 100;
-                }
+                // Use pre-calculated pct from api.js (null when window not covered → shows N/A)
+                p.pctChange24h = histData.pct24h ?? null;
+                p.pctChange1h  = histData.pct1h  ?? null;
             }
         })).then(() => {
-            if (!signal.aborted) updateTotalsAndRender();
+            if (!signal.aborted) {
+                updateTotalsAndRender();
+                state.lastUpdated = Date.now();
+                if (lastUpdatedEl) lastUpdatedEl.textContent = formatLastUpdated(state.lastUpdated);
+            }
         }).catch(console.error).finally(() => {
             if (refreshBtn) refreshBtn.classList.remove('spinning');
         });

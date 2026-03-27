@@ -109,14 +109,11 @@ export async function getHistoricalMetrics(assetId, signal) {
             const cutoff1h = (Date.now() / 1000) - 3600;
             const latestPrice = history[history.length - 1].p;
 
-            // Defaults to earliest entry if no match found within cutoff
-            let histPrice24h = history[0].p;
-            let histTime24h = history[0].t;
-            let histPrice1h = history[0].p;
-            let histTime1h = history[0].t;
+            let histPrice24h = null, histTime24h = null;
+            let histPrice1h = null, histTime1h = null;
             let found24h = false;
 
-            // Single pass: history is sorted ascending by timestamp
+            // Single pass: history sorted ascending by timestamp
             for (const entry of history) {
                 if (!found24h && entry.t >= cutoff24h) {
                     histPrice24h = entry.p;
@@ -130,13 +127,18 @@ export async function getHistoricalMetrics(assetId, signal) {
                 }
             }
 
+            // Sparkline: last 24h of data (up to 48 points), normalized for SVG
+            const sparkRaw = history.filter(e => e.t >= cutoff24h);
+            const sparkline = sparkRaw.length >= 2 ? sparkRaw.map(e => e.p) : null;
+
             return {
-                pct24h: histPrice24h > 0 ? ((latestPrice - histPrice24h) / histPrice24h) * 100 : null,
+                pct24h: histPrice24h !== null && histPrice24h > 0 ? ((latestPrice - histPrice24h) / histPrice24h) * 100 : null,
                 price24h: histPrice24h,
                 time24h: histTime24h,
-                pct1h: histPrice1h > 0 ? ((latestPrice - histPrice1h) / histPrice1h) * 100 : null,
+                pct1h: histPrice1h !== null && histPrice1h > 0 ? ((latestPrice - histPrice1h) / histPrice1h) * 100 : null,
                 price1h: histPrice1h,
-                time1h: histTime1h
+                time1h: histTime1h,
+                sparkline,
             };
         } catch(e) {
             if (e.name === 'AbortError') return null;
