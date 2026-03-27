@@ -333,5 +333,6 @@ input:checked + .slider:before {
 @media (max-width: 768px) {
     .activity-section {
         padding: 0.75rem;
+        min-width: 0;
     }
 }
