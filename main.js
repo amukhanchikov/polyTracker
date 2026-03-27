@@ -1,7 +1,8 @@
-import { showToast, formatCurrency, formatTime } from './utils.js';
-import { getHistoricalMetrics, throttle } from './api.js';
+import { showToast, formatCurrency, escapeHtml, isValidAddress, cleanupOldCache, CACHE_TTL_MS, CACHE_PREFIX, RENDER_DEBOUNCE_MS, SEARCH_DEBOUNCE_MS, fetchWithTimeout, FETCH_TIMEOUT_MS } from './utils.js';
+import { getHistoricalMetrics, throttle, getUSDCBalance } from './api.js';
 import { loadCustomCategories, saveCustomCategories, resolveCategory } from './categoryManager.js';
 import { showSkeleton, calculateTotalVal, renderTable } from './ui.js';
+import { fetchActivity } from './activity.js';
 
 // DOM Elements
 const searchInput = document.getElementById('wallet-input');
@@ -10,13 +11,14 @@ const loadingOverlay = document.getElementById('loading');
 const dashboard = document.getElementById('dashboard');
 
 // Stats Elements
+const totalPortfolioEl = document.getElementById('total-portfolio');
 const totalValueEl = document.getElementById('total-value');
+const freeUsdcEl = document.getElementById('free-usdc');
 const totalPnlEl = document.getElementById('total-pnl');
 const positionCountEl = document.getElementById('position-count');
 const grossSpentEl = document.getElementById('gross-spent');
 const grossReceivedEl = document.getElementById('gross-received');
 const grossRedeemedEl = document.getElementById('gross-redeemed');
-const netLiquidityEl = document.getElementById('net-liquidity');
 
 // Containers
 const tableWrapper = document.getElementById('table-wrapper');
@@ -31,16 +33,18 @@ const cancelCategoryBtn = document.getElementById('cancel-category');
 const clearCategoryInputBtn = document.getElementById('clear-category-input');
 const categoryTagsCloud = document.getElementById('category-tags-cloud');
 
-// State
-let customCategories = loadCustomCategories();
-let activeEditConditionId = null;
-let activeBulkOldLabel = null; 
-
-let currentPositionsData = [];
-let currentSortCol = localStorage.getItem('polytracker_sortCol') || 'value';
-let currentSortAsc = localStorage.getItem('polytracker_sortAsc') === 'true';
-let expandedCategories = JSON.parse(localStorage.getItem('polytracker_expanded') || '{}');
-let searchFilter = '';
+// Consolidated Application State
+const state = {
+    customCategories: loadCustomCategories(),
+    activeEditConditionId: null,
+    activeBulkOldLabel: null,
+    positions: [],
+    sortCol: localStorage.getItem('polytracker_sortCol') || 'value',
+    sortAsc: localStorage.getItem('polytracker_sortAsc') === 'true',
+    expandedCategories: JSON.parse(localStorage.getItem('polytracker_expanded') || '{}'),
+    searchFilter: '',
+    abortController: null,  // For cancelling in-flight requests
+};
 
 // Helper to trigger UI render with full state
 function dispatchRender() {
@@ -48,16 +52,23 @@ function dispatchRender() {
         tableWrapper,
         positionCountEl,
         isGrouped: groupToggle.checked,
-        searchFilter,
-        currentPositionsData,
-        currentSortCol,
-        currentSortAsc,
-        expandedCategories
+        searchFilter: state.searchFilter,
+        currentPositionsData: state.positions,
+        currentSortCol: state.sortCol,
+        currentSortAsc: state.sortAsc,
+        expandedCategories: state.expandedCategories
     });
 }
 
 // Fetch and Render Data
 async function analyzeWallet(address) {
+    // Cancel any in-flight requests from previous call
+    if (state.abortController) {
+        state.abortController.abort();
+    }
+    state.abortController = new AbortController();
+    const { signal } = state.abortController;
+
     // UI State — show skeleton immediately, no spinner overlay
     dashboard.classList.remove('hidden');
     loadingOverlay.classList.add('hidden');
@@ -71,113 +82,53 @@ async function analyzeWallet(address) {
 
     try {
         // Fetch Activity (Parallelized)
-        const fetchActivity = async () => {
-            try {
-                const actRes = await fetch(`https://data-api.polymarket.com/activity?user=${address}&limit=200`);
-                if (!actRes.ok) return null;
-                const activities = await actRes.json();
-                const cutoff = (Date.now() / 1000) - (24 * 3600);
-                const recent = activities.filter(a => a.timestamp >= cutoff);
-                
-                const trades = recent.filter(a => a.type === 'TRADE');
-                const redeems = recent.filter(a => a.type === 'REDEEM');
-
-                let localGrossSpent = 0;
-                let localGrossReceived = 0;
-                let localGrossRedeemed = 0;
-
-                trades.forEach(t => {
-                    if (t.side === 'BUY') localGrossSpent += (t.usdcSize || 0);
-                    if (t.side === 'SELL') localGrossReceived += (t.usdcSize || 0);
-                });
-
-                redeems.forEach(r => {
-                    localGrossRedeemed += (r.usdcValue || r.usdcSize || 0);
-                });
-
-                const netLiquidity = (localGrossReceived + localGrossRedeemed) - localGrossSpent;
-
-                // UI Updates
-                grossSpentEl.innerText = `-${formatCurrency(localGrossSpent)}`;
-                grossReceivedEl.innerText = `+${formatCurrency(localGrossReceived)}`;
-                grossRedeemedEl.innerText = `+${formatCurrency(localGrossRedeemed)}`;
-                
-                const netFlowEl = document.getElementById('net-flow');
-                
-                document.getElementById('net-liquidity').className = `value ${netLiquidity >= 0 ? 'positive' : 'negative'}`;
-                document.getElementById('net-liquidity').innerText = `${netLiquidity > 0 ? '+' : ''}${formatCurrency(netLiquidity)}`;
-                
-                netFlowEl.className = `stat-value ${netLiquidity >= 0 ? 'positive' : 'negative'}`;
-                netFlowEl.innerText = `${netLiquidity > 0 ? '+' : ''}${formatCurrency(netLiquidity)}`;
-
-                // Render Recent Trades Fragment
-                const tFrag = document.createDocumentFragment();
-                tradesList.innerHTML = ''; // Clear skeleton if any
-                trades.slice(0, 10).forEach(t => {
-                    const li = document.createElement('li');
-                    li.className = 'trade-item';
-                    const isBuy = t.side === 'BUY';
-                    const tradePrice = t.price ? (parseFloat(t.price) * 100).toFixed(1) + '¢' : '';
-                    
-                    li.innerHTML = `
-                        <div class="trade-icon ${isBuy ? 'buy' : 'sell'}">
-                            <i data-lucide="${isBuy ? 'arrow-down-left' : 'arrow-up-right'}"></i>
-                        </div>
-                        <div class="trade-details">
-                            <div class="top">
-                                <span>${isBuy ? 'Bought' : 'Sold'}</span>
-                                <span class="outcome-badge ${t.outcome ? t.outcome.toLowerCase() : ''}">${t.outcome} ${tradePrice}</span>
-                                <span>for</span>
-                                <strong>${formatCurrency(t.usdcSize)}</strong>
-                                <span class="trade-time">${formatTime(t.timestamp)}</span>
-                            </div>
-                            <div class="market">${t.title}</div>
-                        </div>
-                    `;
-                    tFrag.appendChild(li);
-                });
-                tradesList.appendChild(tFrag);
-                if (window.lucide) window.lucide.createIcons({ attrs: {}, nameAttr: 'data-lucide', nodes: [tradesList] });
-            } catch(e) {
-                console.error('Activity fetch failed', e);
-            }
-        };
-
-        const activityPromise = fetchActivity();
+        const activityPromise = fetchActivity(address, tradesList, {
+            grossSpentEl, grossReceivedEl, grossRedeemedEl
+        }, signal);
 
         // Fetch Positions
-        const posRes = await fetch(`https://data-api.polymarket.com/positions?user=${address}`);
+        const posRes = await fetchWithTimeout(
+            `https://data-api.polymarket.com/positions?user=${address}`,
+            FETCH_TIMEOUT_MS,
+            signal
+        );
         if (!posRes.ok) throw new Error("Failed to fetch positions");
         const allPositions = await posRes.json();
-        
+
+        // Check if aborted while awaiting
+        if (signal.aborted) return;
+
         // Filter Open Positions
         const positions = allPositions.filter(p => p.size > 0 && p.currentValue > 0);
         positions.sort((a,b) => (b.currentValue || 0) - (a.currentValue || 0));
-        
+
         positionCountEl.innerText = positions.length;
 
         // Process basic position data instantly
-        let positionRowsData = positions.map(p => {
-            const categoryObj = resolveCategory(p.conditionId, p.title || '', customCategories);
-            const curPrice = (p.currentValue || 0) / parseFloat(p.size || 1);
-            const entryPrice = parseFloat(p.avgPrice || 0);
+        const positionRowsData = positions.map(p => {
+            const categoryObj = resolveCategory(p.conditionId, p.title || '', state.customCategories);
+            const curPrice = (Number(p.currentValue) || 0) / (parseFloat(p.size) || 1);
+            const entryPrice = parseFloat(p.avgPrice) || 0;
             const roi = entryPrice > 0 ? ((curPrice - entryPrice) / entryPrice) * 100 : 0;
-            const marketUrl = p.eventSlug 
-                ? `https://polymarket.com/event/${p.eventSlug}` 
+            const marketUrl = p.eventSlug
+                ? `https://polymarket.com/event/${p.eventSlug}`
                 : (p.slug ? `https://polymarket.com/event/${p.slug}` : null);
 
-            return { 
-                ...p, 
+            return {
+                ...p,
                 pctChange24h: null, histPrice: null, histTime: null,
                 pctChange1h: null, hist1hPrice: null, hist1hTime: null,
                 curPrice, roi, category: categoryObj, marketUrl
             };
         });
-        
-        currentPositionsData = positionRowsData;
+
+        state.positions = positionRowsData;
+        state.freeUsdc = null; // Will be filled async
+
         const updateTotalsAndRender = () => {
-            const { totV, totP, totChange24h } = calculateTotalVal(currentPositionsData);
-            currentPositionsData.forEach(p => {
+            if (signal.aborted) return;
+            const { totV, totP, totChange24h } = calculateTotalVal(state.positions);
+            state.positions.forEach(p => {
                 p.weight = totV > 0 ? ((p.currentValue || 0) / totV) * 100 : 0;
             });
 
@@ -186,7 +137,11 @@ async function analyzeWallet(address) {
             totalValueEl.innerText = formatCurrency(totV);
             totalPnlEl.className = `stat-value ${totP >= 0 ? 'positive' : 'negative'}`;
             totalPnlEl.innerText = formatCurrency(totP);
-            
+
+            // Total portfolio = positions + free USDC (if loaded)
+            const totalPortfolio = totV + (state.freeUsdc || 0);
+            totalPortfolioEl.innerText = formatCurrency(totalPortfolio);
+
             const total24hChangeEl = document.getElementById('total-24h-change');
             total24hChangeEl.className = `stat-value ${totChange24h >= 0 ? 'positive' : 'negative'}`;
             total24hChangeEl.innerText = `${totChange24h > 0 ? '+' : ''}${formatCurrency(totChange24h)}`;
@@ -195,28 +150,42 @@ async function analyzeWallet(address) {
         // Render immediately with current values
         updateTotalsAndRender();
 
-        let renderTimeout = null;
+        // Fetch free USDC balance from Polygon in background
+        getUSDCBalance(address, signal).then(balance => {
+            if (signal.aborted) return;
+            state.freeUsdc = balance;
+            if (balance !== null) {
+                freeUsdcEl.innerText = formatCurrency(balance);
+                // Update total portfolio card
+                const { totV } = calculateTotalVal(state.positions);
+                totalPortfolioEl.innerText = formatCurrency(totV + balance);
+            } else {
+                freeUsdcEl.innerText = 'N/A';
+            }
+        });
 
-        // Background load historical metrics
-        Promise.all(currentPositionsData.map(async p => {
-            const cacheKey = 'polytracker_ph_' + p.asset;
+        // Background load historical metrics — single render after all complete
+        Promise.all(state.positions.map(async p => {
+            if (signal.aborted) return;
+
+            const cacheKey = CACHE_PREFIX + p.asset;
             let histData = null;
             try {
                 const cached = localStorage.getItem(cacheKey);
                 if (cached) {
                     const parsed = JSON.parse(cached);
-                    if (Date.now() - parsed._ts < 300000) histData = parsed;
+                    if (Date.now() - parsed._ts < CACHE_TTL_MS) histData = parsed;
                 }
             } catch(e) {}
-            
+
             if (!histData) {
-                histData = await throttle(() => getHistoricalMetrics(p.asset));
+                histData = await throttle(() => getHistoricalMetrics(p.asset, signal));
                 if (histData) {
                     try { localStorage.setItem(cacheKey, JSON.stringify({ ...histData, _ts: Date.now() })); } catch(e) {}
                 }
             }
-            
-            if (histData) {
+
+            if (histData && !signal.aborted) {
                 p.histPrice = histData.price24h;
                 p.histTime = histData.time24h;
                 p.hist1hPrice = histData.price1h;
@@ -228,18 +197,17 @@ async function analyzeWallet(address) {
                 if (histData.price1h > 0) {
                     p.pctChange1h = ((p.curPrice - histData.price1h) / histData.price1h) * 100;
                 }
-                
-                // Re-render minimally, debounced to avoid layout thrashing
-                if (renderTimeout) clearTimeout(renderTimeout);
-                renderTimeout = setTimeout(updateTotalsAndRender, 150);
             }
-        })).catch(console.error).finally(() => {
+        })).then(() => {
+            if (!signal.aborted) updateTotalsAndRender();
+        }).catch(console.error).finally(() => {
             if (refreshBtn) refreshBtn.classList.remove('spinning');
         });
 
         await activityPromise;
 
     } catch (e) {
+        if (e.name === 'AbortError') return;
         showToast('Error fetching data. Ensure the wallet address is correct.', 'error');
         console.error(e);
     } finally {
@@ -248,12 +216,30 @@ async function analyzeWallet(address) {
     }
 }
 
-// Event Listeners
+// Event Listeners — Wallet Search
 searchBtn.addEventListener('click', () => {
     const val = searchInput.value.trim();
-    if(val) analyzeWallet(val);
+    if (!val) return;
+    if (!isValidAddress(val)) {
+        showToast('Invalid wallet address. Expected format: 0x... (42 characters)', 'error');
+        return;
+    }
+    analyzeWallet(val);
 });
 
+searchInput.addEventListener('keypress', (e) => {
+    if(e.key === 'Enter') {
+        const val = searchInput.value.trim();
+        if (!val) return;
+        if (!isValidAddress(val)) {
+            showToast('Invalid wallet address. Expected format: 0x... (42 characters)', 'error');
+            return;
+        }
+        analyzeWallet(val);
+    }
+});
+
+// Position Search Filter
 const positionSearchInput = document.getElementById('position-search');
 const clearSearchBtn = document.getElementById('clear-search');
 let searchDebounce = null;
@@ -261,15 +247,15 @@ let searchDebounce = null;
 positionSearchInput.addEventListener('input', () => {
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(() => {
-        searchFilter = positionSearchInput.value.trim();
-        clearSearchBtn.classList.toggle('visible', searchFilter.length > 0);
+        state.searchFilter = positionSearchInput.value.trim();
+        clearSearchBtn.classList.toggle('visible', state.searchFilter.length > 0);
         dispatchRender();
-    }, 200);
+    }, SEARCH_DEBOUNCE_MS);
 });
 
 clearSearchBtn.addEventListener('click', () => {
     positionSearchInput.value = '';
-    searchFilter = '';
+    state.searchFilter = '';
     clearSearchBtn.classList.remove('visible');
     dispatchRender();
 });
@@ -282,26 +268,20 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-searchInput.addEventListener('keypress', (e) => {
-    if(e.key === 'Enter') {
-        const val = searchInput.value.trim();
-        if(val) analyzeWallet(val);
-    }
-});
-
+// Column Sorting — via event delegation
 document.addEventListener('click', (e) => {
     const th = e.target.closest('th.sortable');
     if (!th) return;
 
     const col = th.dataset.sort;
-    if (currentSortCol === col) {
-        currentSortAsc = !currentSortAsc;
+    if (state.sortCol === col) {
+        state.sortAsc = !state.sortAsc;
     } else {
-        currentSortCol = col;
-        currentSortAsc = col === 'market' || col === 'outcome'; // Default asc for strings
+        state.sortCol = col;
+        state.sortAsc = col === 'market' || col === 'outcome'; // Default asc for strings
     }
-    localStorage.setItem('polytracker_sortCol', currentSortCol);
-    localStorage.setItem('polytracker_sortAsc', String(currentSortAsc));
+    localStorage.setItem('polytracker_sortCol', state.sortCol);
+    localStorage.setItem('polytracker_sortAsc', String(state.sortAsc));
     dispatchRender();
 });
 
@@ -353,7 +333,7 @@ const refreshNowBtn = document.getElementById('refresh-now-btn');
 refreshNowBtn.addEventListener('click', () => {
     const addr = searchInput.value.trim();
     if (!addr) return;
-    
+
     // Reset countdown if auto-refresh active
     const interval = parseInt(refreshSelect.value);
     if (interval > 0) {
@@ -363,77 +343,118 @@ refreshNowBtn.addEventListener('click', () => {
     analyzeWallet(addr);
 });
 
-// Init state from local storage (with safety)
+// Init state from local storage
 groupToggle.checked = localStorage.getItem('polytracker_grouped') === 'true';
-
-window.toggleCategory = function(catId) {
-    const isExpanded = expandedCategories[catId] !== false;
-    expandedCategories[catId] = !isExpanded;
-    localStorage.setItem('polytracker_expanded', JSON.stringify(expandedCategories));
-    dispatchRender();
-};
 
 groupToggle.addEventListener('change', () => {
     localStorage.setItem('polytracker_grouped', groupToggle.checked);
-    currentSortCol = 'value';
-    currentSortAsc = false;
+    state.sortCol = 'value';
+    state.sortAsc = false;
     dispatchRender();
 });
 
-// Category Overrides
-window.openCategoryModal = function(conditionId, title, currentCat) {
-    activeEditConditionId = conditionId;
+// === Event Delegation for table actions (replaces window.* globals) ===
+document.addEventListener('click', (e) => {
+    // Toggle category expand/collapse
+    const categoryRow = e.target.closest('[data-action="toggle-category"]');
+    if (categoryRow) {
+        // Ignore if click was on the rename button
+        if (e.target.closest('[data-action="bulk-rename"]')) return;
+
+        const catId = categoryRow.dataset.categoryId;
+        const isExpanded = state.expandedCategories[catId] !== false;
+        state.expandedCategories[catId] = !isExpanded;
+        localStorage.setItem('polytracker_expanded', JSON.stringify(state.expandedCategories));
+        dispatchRender();
+        return;
+    }
+
+    // Edit category for single position
+    const editBtn = e.target.closest('[data-action="edit-category"]');
+    if (editBtn) {
+        const conditionId = decodeURIComponent(editBtn.dataset.condition || '');
+        const title = editBtn.dataset.title || '';
+        const currentCat = editBtn.dataset.cat || '';
+        openCategoryModal(conditionId, title, currentCat);
+        return;
+    }
+
+    // Bulk rename category
+    const renameBtn = e.target.closest('[data-action="bulk-rename"]');
+    if (renameBtn) {
+        e.stopPropagation();
+        const oldLabel = renameBtn.dataset.oldLabel || '';
+        openBulkRenameModal(oldLabel);
+        return;
+    }
+
+    // Category tag selection in modal
+    const tagBtn = e.target.closest('[data-action="select-tag"]');
+    if (tagBtn) {
+        categoryInput.value = tagBtn.dataset.label || '';
+        updateCategoryTagHighlights();
+        return;
+    }
+});
+
+// === Category Modal Functions ===
+function openCategoryModal(conditionId, title, currentCat) {
+    state.activeEditConditionId = conditionId;
+    state.activeBulkOldLabel = null;
     modalMarketTitle.innerText = title;
     const initialVal = currentCat !== 'Other' ? currentCat : '';
     categoryInput.value = initialVal;
     categoryModal.classList.remove('hidden');
-    
+    categoryModal.setAttribute('role', 'dialog');
+    categoryModal.setAttribute('aria-modal', 'true');
+
     setTimeout(() => {
         categoryInput.focus();
         categoryInput.select();
     }, 50);
-    
-    if (categoryTagsCloud) {
-        const usedLabels = new Set();
-        currentPositionsData.forEach(p => {
-            if (p.category && p.category.label && p.category.label !== 'Other') {
-                usedLabels.add(p.category.label);
-            }
-        });
-        
-        const sortedLabels = Array.from(usedLabels).sort();
-        
-        if (sortedLabels.length === 0) {
-            categoryTagsCloud.innerHTML = '<div style="font-size:0.8rem; color:var(--text-muted); padding:0.5rem">No categories in use. Type to create one.</div>';
-        } else {
-            categoryTagsCloud.innerHTML = sortedLabels.map(l => {
-                const isActive = l.toLowerCase() === initialVal.toLowerCase();
-                return `<button class="category-tag ${isActive ? 'active' : ''}" onclick="window.selectCategoryTag('${l.replace(/'/g, "\\'")}')">${l}</button>`;
-            }).join('');
-        }
-    }
-};
 
-window.openBulkRenameModal = function(e, oldLabel) {
-    e.stopPropagation();
-    activeBulkOldLabel = oldLabel;
-    activeEditConditionId = null;
-    modalMarketTitle.innerText = `Renaming all positions in "${oldLabel}"`;
+    buildCategoryTagsCloud(initialVal);
+}
+
+function openBulkRenameModal(oldLabel) {
+    state.activeBulkOldLabel = oldLabel;
+    state.activeEditConditionId = null;
+    const titleText = `Renaming all positions in "${oldLabel}"`;
+    modalMarketTitle.innerText = titleText;
     categoryInput.value = oldLabel;
     categoryModal.classList.remove('hidden');
-    
+    categoryModal.setAttribute('role', 'dialog');
+    categoryModal.setAttribute('aria-modal', 'true');
+
     setTimeout(() => {
         categoryInput.focus();
         categoryInput.select();
     }, 50);
-    
-    window.openCategoryModal(null, modalMarketTitle.innerText, oldLabel);
-};
 
-window.selectCategoryTag = function(label) {
-    categoryInput.value = label;
-    updateCategoryTagHighlights();
-};
+    buildCategoryTagsCloud(oldLabel);
+}
+
+function buildCategoryTagsCloud(initialVal) {
+    if (!categoryTagsCloud) return;
+
+    const usedLabels = new Set();
+    state.positions.forEach(p => {
+        if (p.category && p.category.label && p.category.label !== 'Other') {
+            usedLabels.add(p.category.label);
+        }
+    });
+
+    const sortedLabels = Array.from(usedLabels).sort();
+
+    if (sortedLabels.length === 0) {
+        categoryTagsCloud.innerHTML = '<div class="tags-cloud-empty">No categories in use. Type to create one.</div>';
+    } else {
+        categoryTagsCloud.innerHTML = sortedLabels.map(l => {
+            const isActive = l.toLowerCase() === (initialVal || '').toLowerCase();
+            return `<button class="category-tag ${isActive ? 'active' : ''}" data-action="select-tag" data-label="${escapeHtml(l)}">${escapeHtml(l)}</button>`;
+        }).join('');
+    }
+}
 
 function updateCategoryTagHighlights() {
     const currentVal = categoryInput.value.trim().toLowerCase();
@@ -454,55 +475,85 @@ if (clearCategoryInputBtn) {
 
 function closeCategoryModal() {
     categoryModal.classList.add('hidden');
+    categoryModal.removeAttribute('role');
+    categoryModal.removeAttribute('aria-modal');
     categoryInput.value = '';
-    activeEditConditionId = null;
+    state.activeEditConditionId = null;
+    state.activeBulkOldLabel = null;
 }
 
 cancelCategoryBtn.addEventListener('click', closeCategoryModal);
 
 saveCategoryBtn.addEventListener('click', () => {
     const newCat = categoryInput.value.trim();
-    
-    if (activeBulkOldLabel) {
-        currentPositionsData.forEach(p => {
-            if (p.category && p.category.label === activeBulkOldLabel) {
-                if (newCat) customCategories[p.conditionId] = newCat;
-                else delete customCategories[p.conditionId];
+
+    if (state.activeBulkOldLabel) {
+        state.positions.forEach(p => {
+            if (p.category && p.category.label === state.activeBulkOldLabel) {
+                if (newCat) state.customCategories[p.conditionId] = newCat;
+                else delete state.customCategories[p.conditionId];
             }
         });
-        activeBulkOldLabel = null;
-    } else if (activeEditConditionId) {
-        if (newCat) customCategories[activeEditConditionId] = newCat;
-        else delete customCategories[activeEditConditionId];
+    } else if (state.activeEditConditionId) {
+        if (newCat) state.customCategories[state.activeEditConditionId] = newCat;
+        else delete state.customCategories[state.activeEditConditionId];
     } else {
         closeCategoryModal();
         return;
     }
-    
-    saveCustomCategories(customCategories);
+
+    saveCustomCategories(state.customCategories);
     closeCategoryModal();
-    
-    for (let p of currentPositionsData) {
-        p.category = resolveCategory(p.conditionId, p.title, customCategories);
+
+    for (let p of state.positions) {
+        p.category = resolveCategory(p.conditionId, p.title, state.customCategories);
     }
 
-    setTimeout(() => {
-        dispatchRender();
-    }, 10);
+    dispatchRender();
 });
 
+// Close modal on backdrop click
 categoryModal.addEventListener('click', (e) => {
     if (e.target === categoryModal) closeCategoryModal();
 });
+
+// Close modal on Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !categoryModal.classList.contains('hidden')) {
+        closeCategoryModal();
+    }
+});
+
 categoryInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') saveCategoryBtn.click();
 });
 
+// Focus trap for modal accessibility
+categoryModal.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const focusable = categoryModal.querySelectorAll('input, button:not([disabled])');
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+    }
+});
+
 // Auto-run on load
 window.onload = () => {
+    // Cleanup old cache entries
+    cleanupOldCache();
+
     const savedWallet = localStorage.getItem('polytracker_wallet');
     const inputVal = searchInput.value.trim();
-    
+
     if (inputVal) {
         analyzeWallet(inputVal);
     } else if (savedWallet) {

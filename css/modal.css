@@ -170,3 +170,9 @@
     border-color: var(--accent);
     color: white;
 }
+
+.tags-cloud-empty {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    padding: 0.5rem;
+}

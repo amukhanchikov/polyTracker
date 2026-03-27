@@ -36,14 +36,24 @@
             <div id="dashboard" class="hidden">
                 <!-- Data Overview Cards -->
                 <section class="overview-grid">
-                    <div class="glass-card stat-card">
+                    <div class="glass-card stat-card stat-card--wide">
                         <div class="stat-header">
                             <i data-lucide="briefcase"></i>
-                            <h3>Total Portfolio Value</h3>
+                            <h3>Total Portfolio</h3>
                         </div>
-                        <div class="stat-value" id="total-value">$0.00</div>
+                        <div class="stat-value" id="total-portfolio">$0.00</div>
+                        <div class="stat-breakdown">
+                            <div class="breakdown-row">
+                                <span class="breakdown-label">Positions</span>
+                                <span class="breakdown-value" id="total-value">$0.00</span>
+                            </div>
+                            <div class="breakdown-row">
+                                <span class="breakdown-label">Free USDC</span>
+                                <span class="breakdown-value" id="free-usdc"><span class="stat-loading-dots">···</span></span>
+                            </div>
+                        </div>
                     </div>
-                    
+
                     <div class="glass-card stat-card">
                         <div class="stat-header">
                             <i data-lucide="trending-up"></i>
@@ -145,8 +155,8 @@
     </div>
 
     <!-- Category Edit Modal -->
-    <div id="category-modal" class="modal hidden">
-        <div class="modal-content glass-card">
+    <div id="category-modal" class="modal hidden" aria-label="Assign Category">
+        <div class="modal-content glass-card" role="document">
             <h3>Assign Category</h3>
             <p id="modal-market-title" style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;"></p>
             <div class="category-input-wrap">
