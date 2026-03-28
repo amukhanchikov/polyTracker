@@ -1,7 +1,8 @@
 import { formatCurrency, formatPct, escapeHtml, SORT_NULL_VALUE } from './utils.js';
 
-// Cached group order — preserved when expanding groups
-let _lastGroupOrder = null;
+// Group sort state — only updated when user clicks sort while all collapsed
+let _groupSortCol = 'value';
+let _groupSortAsc = false;
 
 function generateSparklineSVG(prices, pctChange) {
     if (!prices || prices.length < 2) return '';
@@ -169,6 +170,15 @@ function calcGroupAggregates(items) {
     };
 }
 
+export function setGroupSort(col, asc) {
+    _groupSortCol = col;
+    _groupSortAsc = asc;
+}
+
+export function getGroupSort() {
+    return { col: _groupSortCol, asc: _groupSortAsc };
+}
+
 export function renderTable(state) {
     const {
         tableWrapper,
@@ -243,47 +253,23 @@ export function renderTable(state) {
             groups[cid].totalWeight += p.weight || 0;
         });
 
-        // Sort groups: by column when all collapsed, freeze order when any expanded
-        const allCollapsed = Object.values(groups).every(g => expandedCategories[g.id] === false);
-
-        function sortGroupsByColumn(groupList) {
-            return groupList.sort((a, b) => {
-                const aggA = calcGroupAggregates(a.items);
-                const aggB = calcGroupAggregates(b.items);
-                let valA, valB;
-                switch (currentSortCol) {
-                    case 'market': valA = a.label || ''; valB = b.label || ''; break;
-                    case 'currentPrice': valA = aggA.avgPrice; valB = aggB.avgPrice; break;
-                    case 'weight': valA = a.totalWeight; valB = b.totalWeight; break;
-                    case 'change1h': valA = aggA.avg1h !== null ? aggA.avg1h : SORT_NULL_VALUE; valB = aggB.avg1h !== null ? aggB.avg1h : SORT_NULL_VALUE; break;
-                    case 'change24h': valA = aggA.avg24h !== null ? aggA.avg24h : SORT_NULL_VALUE; valB = aggB.avg24h !== null ? aggB.avg24h : SORT_NULL_VALUE; break;
-                    case 'value': default: valA = a.totalVal; valB = b.totalVal; break;
-                }
-                if (valA < valB) return currentSortAsc ? -1 : 1;
-                if (valA > valB) return currentSortAsc ? 1 : -1;
-                return 0;
-            });
-        }
-
-        let sortedGroups;
-        if (allCollapsed) {
-            sortedGroups = sortGroupsByColumn(Object.values(groups));
-            // Cache the group order for when groups get expanded
-            _lastGroupOrder = sortedGroups.map(g => g.id);
-        } else if (_lastGroupOrder && _lastGroupOrder.length > 0) {
-            // Use cached order, append any new groups at the end
-            const groupMap = {};
-            Object.values(groups).forEach(g => { groupMap[g.id] = g; });
-            sortedGroups = [];
-            for (const id of _lastGroupOrder) {
-                if (groupMap[id]) { sortedGroups.push(groupMap[id]); delete groupMap[id]; }
+        // Always sort groups by the dedicated group sort state
+        const sortedGroups = Object.values(groups).sort((a, b) => {
+            const aggA = calcGroupAggregates(a.items);
+            const aggB = calcGroupAggregates(b.items);
+            let valA, valB;
+            switch (_groupSortCol) {
+                case 'market': valA = a.label || ''; valB = b.label || ''; break;
+                case 'currentPrice': valA = aggA.avgPrice; valB = aggB.avgPrice; break;
+                case 'weight': valA = a.totalWeight; valB = b.totalWeight; break;
+                case 'change1h': valA = aggA.avg1h !== null ? aggA.avg1h : SORT_NULL_VALUE; valB = aggB.avg1h !== null ? aggB.avg1h : SORT_NULL_VALUE; break;
+                case 'change24h': valA = aggA.avg24h !== null ? aggA.avg24h : SORT_NULL_VALUE; valB = aggB.avg24h !== null ? aggB.avg24h : SORT_NULL_VALUE; break;
+                case 'value': default: valA = a.totalVal; valB = b.totalVal; break;
             }
-            // Append any groups not in cached order
-            sortedGroups.push(...Object.values(groupMap));
-        } else {
-            // No cached order — sort by value as default
-            sortedGroups = Object.values(groups).sort((a, b) => b.totalVal - a.totalVal);
-        }
+            if (valA < valB) return _groupSortAsc ? -1 : 1;
+            if (valA > valB) return _groupSortAsc ? 1 : -1;
+            return 0;
+        });
 
         finalHTML += tableHTMLStart;
         for (const g of sortedGroups) {

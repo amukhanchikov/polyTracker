@@ -1,7 +1,7 @@
 import { showToast, formatCurrency, escapeHtml, isValidAddress, cleanupOldCache, CACHE_TTL_MS, CACHE_PREFIX, SEARCH_DEBOUNCE_MS, fetchWithTimeout, FETCH_TIMEOUT_MS } from './utils.js';
 import { getHistoricalMetrics, throttle, getUSDCBalance } from './api.js';
 import { loadCustomCategories, saveCustomCategories, resolveCategory } from './categoryManager.js';
-import { showSkeleton, calculateTotalVal, renderTable } from './ui.js';
+import { showSkeleton, calculateTotalVal, renderTable, setGroupSort, getGroupSort } from './ui.js';
 import { fetchActivity } from './activity.js';
 
 // DOM Elements
@@ -431,6 +431,15 @@ document.addEventListener('click', (e) => {
     }
     localStorage.setItem('polytracker_sortCol', state.sortCol);
     localStorage.setItem('polytracker_sortAsc', String(state.sortAsc));
+
+    // Update group sort only when all groups are collapsed
+    if (groupToggle.checked) {
+        const allCollapsed = Object.values(state.expandedCategories).length > 0 &&
+            Object.values(state.expandedCategories).every(v => v === false);
+        if (allCollapsed) {
+            setGroupSort(state.sortCol, state.sortAsc);
+        }
+    }
     dispatchRender();
 });
 
@@ -510,6 +519,17 @@ document.addEventListener('click', (e) => {
         const isExpanded = state.expandedCategories[catId] !== false;
         state.expandedCategories[catId] = !isExpanded;
         localStorage.setItem('polytracker_expanded', JSON.stringify(state.expandedCategories));
+
+        // If all collapsed now, restore sort indicator to group sort
+        const allCollapsed = Object.values(state.expandedCategories).length > 0 &&
+            Object.values(state.expandedCategories).every(v => v === false);
+        if (allCollapsed) {
+            const gs = getGroupSort();
+            state.sortCol = gs.col;
+            state.sortAsc = gs.asc;
+            localStorage.setItem('polytracker_sortCol', state.sortCol);
+            localStorage.setItem('polytracker_sortAsc', String(state.sortAsc));
+        }
         dispatchRender();
         return;
     }
