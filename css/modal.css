@@ -7,8 +7,7 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(10, 10, 12, 0.8);
-    backdrop-filter: blur(5px);
+    background: rgba(0, 0, 0, 0.7);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -32,8 +31,8 @@
 }
 
 .modal-content input {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--card-border);
     padding: 0.75rem 1rem;
     border-radius: 8px;
     color: white;
@@ -65,17 +64,18 @@
 }
 
 .btn-primary {
-    background: white;
-    color: black;
+    background: var(--accent);
+    color: white;
     border: none;
     padding: 0.5rem 1.25rem;
-    border-radius: 6px;
+    border-radius: 8px;
     font-weight: 600;
     cursor: pointer;
+    transition: background 0.15s;
 }
 
 .btn-primary:hover {
-    background: #e0e0e0;
+    background: var(--accent-hover);
 }
 
 /* Category Modal Addons */
@@ -147,10 +147,10 @@
 
 .category-tag {
     background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     color: var(--text-muted);
     padding: 0.4rem 0.8rem;
-    border-radius: 20px;
+    border-radius: 6px;
     font-size: 0.8rem;
     cursor: pointer;
     transition: all 0.2s;
@@ -160,10 +160,9 @@
     font-weight: 600;
 }
 .category-tag:hover {
-    background: rgba(88, 166, 255, 0.15);
+    background: rgba(59, 130, 246, 0.12);
     border-color: var(--accent);
     color: var(--accent);
-    transform: translateY(-1.5px);
 }
 .category-tag.active {
     background: var(--accent);

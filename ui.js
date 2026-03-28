@@ -57,9 +57,9 @@ export function calculateTotalVal(currentPositionsData) {
 function generateRowTemplate(p, showWalletBadge) {
     const pnlClass = p.cashPnl >= 0 ? 'value-positive' : 'value-negative';
     const roiClass = p.roi >= 0 ? 'value-positive' : 'value-negative';
-    const change1hClass = p.pctChange1h !== null ? (p.pctChange1h >= 0 ? 'value-positive' : 'value-negative') : '';
+    const change1hClass = p.pctChange1h !== null ? (p.pctChange1h > 0 ? 'value-positive' : p.pctChange1h < 0 ? 'value-negative' : '') : '';
     const change1hText = p.pctChange1h !== null ? formatPct(p.pctChange1h) : 'N/A';
-    const changeClass = p.pctChange24h !== null ? (p.pctChange24h >= 0 ? 'value-positive' : 'value-negative') : '';
+    const changeClass = p.pctChange24h !== null ? (p.pctChange24h > 0 ? 'value-positive' : p.pctChange24h < 0 ? 'value-negative' : '') : '';
     const changeText = p.pctChange24h !== null ? formatPct(p.pctChange24h) : 'N/A';
     const outcomeClass = p.outcome ? p.outcome.toLowerCase().replace(/[^a-z0-9]/g, '') : '';
     const isYesNo = ['yes', 'no'].includes(outcomeClass);

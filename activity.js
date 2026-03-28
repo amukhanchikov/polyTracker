@@ -64,7 +64,7 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
         allActivity.forEach(a => {
             const key = a.title || 'Unknown';
             if (!byMarket.has(key)) {
-                byMarket.set(key, { title: key, items: [], totalOut: 0, totalIn: 0 });
+                byMarket.set(key, { title: key, slug: a.slug || a.eventSlug || '', items: [], totalOut: 0, totalIn: 0 });
             }
             const g = byMarket.get(key);
             g.items.push(a);
@@ -83,9 +83,13 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
                 : '';
         }
 
-        // Render grouped list sorted by total volume desc
+        // Render grouped list sorted by most recent trade first
         const groups = [...byMarket.values()]
-            .sort((a, b) => (b.totalOut + b.totalIn) - (a.totalOut + a.totalIn));
+            .sort((a, b) => {
+                const aMax = Math.max(...a.items.map(i => Number(i.timestamp) || 0));
+                const bMax = Math.max(...b.items.map(i => Number(i.timestamp) || 0));
+                return bMax - aMax;
+            });
 
         tradesList.innerHTML = '';
         const tFrag = document.createDocumentFragment();
@@ -100,6 +104,8 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
 
             const iconName  = hasRedeem ? 'trophy' : (isPositive ? 'arrow-up-right' : 'arrow-down-left');
             const iconClass = hasRedeem ? 'redeem'  : (isPositive ? 'sell' : 'buy');
+            const newestTs = Math.max(...g.items.map(i => Number(i.timestamp) || 0));
+            const groupTime = formatTime(newestTs);
 
             // Build sub-rows for individual trades
             const subRowsHTML = g.items
@@ -133,9 +139,12 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
                 </div>
                 <div class="trade-details">
                     <div class="trade-group-header">
-                        <span class="trade-market">${escapeHtml(g.title)}</span>
-                        <span class="trade-count">${countLabel}</span>
-                        ${isExpandable ? '<i data-lucide="chevron-down" class="trade-chevron"></i>' : ''}
+                        ${g.slug
+                            ? `<a href="https://polymarket.com/event/${encodeURIComponent(g.slug)}" target="_blank" rel="noopener noreferrer" class="trade-market trade-market-link">${escapeHtml(g.title)}</a>`
+                            : `<span class="trade-market">${escapeHtml(g.title)}</span>`
+                        }
+                        <span class="trade-count">${countLabel}${isExpandable ? ' <i data-lucide="chevron-down" class="trade-chevron"></i>' : ''}</span>
+                        <span class="trade-time">${groupTime}</span>
                         <span class="trade-net ${isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${formatCurrency(net)}</span>
                     </div>
                     ${isExpandable ? `<div class="trade-sub-list">${subRowsHTML}</div>` : ''}
@@ -143,7 +152,8 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
             `;
 
             if (isExpandable) {
-                li.querySelector('.trade-group-header').addEventListener('click', () => {
+                li.querySelector('.trade-group-header').addEventListener('click', (e) => {
+                    if (e.target.closest('a')) return; // Don't toggle when clicking market link
                     li.classList.toggle('expanded');
                 });
             }

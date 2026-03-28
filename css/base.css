@@ -2,18 +2,16 @@
    BASE & RESET
    =========================== */
 :root {
-    --bg-color: #0d1117;
-    --card-bg: rgba(22, 27, 34, 0.65);
-    --card-border: rgba(255, 255, 255, 0.08);
-    --text-main: #f0f6fc;
-    --text-muted: #8b949e;
-    --accent: #58a6ff;
-    --accent-hover: #3182ce;
-    --positive: #3fb950;
-    --negative: #f85149;
-    --gradient-1: #58a6ff;
-    --gradient-2: #8957e5;
-    --transition: 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    --bg-color: #0C0F14;
+    --card-bg: #14171E;
+    --card-border: rgba(255, 255, 255, 0.06);
+    --text-main: #E8EAED;
+    --text-muted: #7A8191;
+    --accent: #3B82F6;
+    --accent-hover: #2563EB;
+    --positive: #00DC82;
+    --negative: #FF5252;
+    --transition: 0.2s ease;
 }
 
 * {
@@ -23,12 +21,13 @@
 }
 
 body {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Plus Jakarta Sans', sans-serif;
     background-color: var(--bg-color);
     color: var(--text-main);
     min-height: 100vh;
     overflow-x: hidden;
     position: relative;
+    -webkit-font-smoothing: antialiased;
 }
 
 /* ===========================

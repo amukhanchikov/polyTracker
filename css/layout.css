@@ -1,47 +1,4 @@
 /* ===========================
-   BACKGROUND BLOBS
-   =========================== */
-.blob {
-    position: absolute;
-    filter: blur(100px);
-    z-index: -1;
-    opacity: 0.5;
-    animation: float 20s infinite ease-in-out alternate;
-}
-
-.blob-1 {
-    top: -10%;
-    left: -10%;
-    width: 600px;
-    height: 600px;
-    background: radial-gradient(circle, var(--gradient-1) 0%, transparent 70%);
-}
-
-.blob-2 {
-    bottom: -10%;
-    right: -10%;
-    width: 800px;
-    height: 800px;
-    background: radial-gradient(circle, var(--gradient-2) 0%, transparent 70%);
-    animation-delay: -5s;
-}
-
-.blob-3 {
-    top: 40%;
-    left: 40%;
-    width: 500px;
-    height: 500px;
-    background: radial-gradient(circle, rgba(63, 185, 80, 0.2) 0%, transparent 70%);
-    animation-delay: -10s;
-}
-
-@keyframes float {
-    100% {
-        transform: translate(50px, 50px) scale(1.1);
-    }
-}
-
-/* ===========================
    LAYOUT
    =========================== */
 .container {
@@ -50,7 +7,6 @@
     margin: 0 auto;
     padding: 2rem;
     position: relative;
-    z-index: 10;
 }
 
 /* ===========================
@@ -59,45 +15,51 @@
 .overview-grid {
     display: grid;
     grid-template-columns: 2fr 1fr 1fr 1fr;
-    gap: 1.5rem;
+    gap: 1rem;
     margin-bottom: 2rem;
 }
 
 .stat-card {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    transition: var(--transition);
+    gap: 0.5rem;
+    transition: background 0.2s ease;
 }
 
 .stat-card:hover {
-    transform: translateY(-4px);
-    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+/* Non-wide cards: compact */
+.stat-card:not(.stat-card--wide) {
+    padding: 1.25rem;
+    justify-content: center;
 }
 
 .stat-header {
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.5rem;
     color: var(--text-muted);
 }
 
 .stat-header i {
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
 }
 
 .stat-header h3 {
-    font-size: 0.9rem;
-    font-weight: 500;
+    font-size: 0.68rem;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 1.5px;
 }
 
 .stat-value {
-    font-size: 2.25rem;
+    font-size: 1.75rem;
     font-weight: 700;
-    letter-spacing: -1px;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
 }
 
 /* Wide portfolio card: positions + free USDC breakdown */
@@ -105,12 +67,16 @@
     font-size: 2.5rem;
 }
 
+.stat-card--wide .stat-header h3 {
+    font-size: 0.72rem;
+}
+
 .stat-breakdown {
     display: flex;
     flex-direction: column;
     gap: 0.2rem;
     padding-top: 0.4rem;
-    border-top: 1px solid rgba(255,255,255,0.07);
+    border-top: 1px solid var(--card-border);
 }
 
 .breakdown-row {
@@ -195,7 +161,7 @@
         gap: 0.5rem;
     }
     .stat-header h3 {
-        font-size: 0.75rem;
+        font-size: 0.65rem;
     }
     .stat-value {
         font-size: 1.6rem;
