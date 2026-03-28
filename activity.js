@@ -44,10 +44,11 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
         const netLiquidity = localGrossCashIn - localGrossSpent;
 
         grossSpentEl.innerText  = `-${formatCurrency(localGrossSpent)}`;
+        grossCashInEl.className = `value ${localGrossCashIn > 0 ? 'positive' : ''}`;
         grossCashInEl.innerText = `+${formatCurrency(localGrossCashIn)}`;
 
         const netLiqEl = document.getElementById('net-liquidity');
-        netLiqEl.className = `value ${netLiquidity >= 0 ? 'positive' : 'negative'}`;
+        netLiqEl.className = `value ${netLiquidity > 0 ? 'positive' : netLiquidity < 0 ? 'negative' : ''}`;
         netLiqEl.innerText = `${netLiquidity > 0 ? '+' : ''}${formatCurrency(netLiquidity)}`;
 
         // Group all activity by market title

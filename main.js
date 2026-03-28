@@ -494,8 +494,6 @@ groupToggle.checked = localStorage.getItem('polytracker_grouped') === 'true';
 
 groupToggle.addEventListener('change', () => {
     localStorage.setItem('polytracker_grouped', groupToggle.checked);
-    state.sortCol = 'value';
-    state.sortAsc = false;
     dispatchRender();
 });
 
