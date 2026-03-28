@@ -34,46 +34,25 @@
 
             <div id="dashboard" class="hidden">
                 <!-- Data Overview Cards -->
-                <section class="overview-grid">
-                    <div class="glass-card stat-card stat-card--wide">
-                        <div class="stat-header">
-                            <i data-lucide="briefcase"></i>
-                            <h3>Total Portfolio</h3>
-                        </div>
+                <section class="stats-strip">
+                    <div class="stat-item stat-item--wide">
+                        <div class="stat-label"><i data-lucide="briefcase"></i> Total Portfolio</div>
                         <div class="stat-value" id="total-portfolio">$0.00</div>
-                        <div class="stat-breakdown">
-                            <div class="breakdown-row">
-                                <span class="breakdown-label">Positions</span>
-                                <span class="breakdown-value" id="total-value">$0.00</span>
-                            </div>
-                            <div class="breakdown-row">
-                                <span class="breakdown-label">Free USDC</span>
-                                <span class="breakdown-value" id="free-usdc"><span class="stat-loading-dots">···</span></span>
-                            </div>
+                        <div class="stat-sub">
+                            <span>Pos <b id="total-value">$0.00</b></span>
+                            <span> · USDC <b id="free-usdc"><span class="stat-loading-dots">···</span></b></span>
                         </div>
                     </div>
-
-                    <div class="glass-card stat-card">
-                        <div class="stat-header">
-                            <i data-lucide="clock"></i>
-                            <h3>1h Portfolio Δ</h3>
-                        </div>
+                    <div class="stat-item">
+                        <div class="stat-label"><i data-lucide="clock"></i> 1h Portfolio Δ</div>
                         <div class="stat-value" id="total-1h-change">$0.00</div>
                     </div>
-
-                    <div class="glass-card stat-card">
-                        <div class="stat-header">
-                            <i data-lucide="bar-chart-2"></i>
-                            <h3>24h Portfolio Δ</h3>
-                        </div>
+                    <div class="stat-item">
+                        <div class="stat-label"><i data-lucide="bar-chart-2"></i> 24h Portfolio Δ</div>
                         <div class="stat-value" id="total-24h-change">$0.00</div>
                     </div>
-
-                    <div class="glass-card stat-card">
-                        <div class="stat-header">
-                            <i data-lucide="trending-up"></i>
-                            <h3>Total PnL</h3>
-                        </div>
+                    <div class="stat-item">
+                        <div class="stat-label"><i data-lucide="trending-up"></i> Total PnL</div>
                         <div class="stat-value" id="total-pnl">$0.00</div>
                     </div>
                 </section>
