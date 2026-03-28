@@ -232,7 +232,7 @@ a.market-title-link:hover {
 }
 
 .edit-category-btn:hover {
-    color: var(--text);
+    color: var(--text-main);
     opacity: 1 !important;
 }
 

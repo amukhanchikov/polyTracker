@@ -4,6 +4,17 @@ import { loadCustomCategories, saveCustomCategories, resolveCategory } from './c
 import { showSkeleton, calculateTotalVal, renderTable, setGroupSort, getGroupSort } from './ui.js';
 import { fetchActivity } from './activity.js';
 
+// localStorage keys
+const LS = {
+    WALLETS: 'polytracker_wallets',
+    WALLET_OLD: 'polytracker_wallet',
+    SORT_COL: 'polytracker_sortCol',
+    SORT_ASC: 'polytracker_sortAsc',
+    EXPANDED: 'polytracker_expanded',
+    GROUPED: 'polytracker_grouped',
+    REFRESH_INTERVAL: 'polytracker_refreshInterval',
+};
+
 // DOM Elements
 const walletInput = document.getElementById('wallet-input');
 const addWalletBtn = document.getElementById('add-wallet-btn');
@@ -43,9 +54,9 @@ const state = {
     activeEditConditionId: null,
     activeBulkOldLabel: null,
     wallets: [], // [{ address, colorIdx, positions, freeUsdc, abortController }]
-    sortCol: localStorage.getItem('polytracker_sortCol') || 'value',
-    sortAsc: localStorage.getItem('polytracker_sortAsc') === 'true',
-    expandedCategories: JSON.parse(localStorage.getItem('polytracker_expanded') || '{}'),
+    sortCol: localStorage.getItem(LS.SORT_COL) || 'value',
+    sortAsc: localStorage.getItem(LS.SORT_ASC) === 'true',
+    expandedCategories: JSON.parse(localStorage.getItem(LS.EXPANDED) || '{}'),
     searchFilter: '',
     lastUpdated: null,
 };
@@ -68,7 +79,7 @@ function getNextColorIdx() {
 }
 
 function saveWallets() {
-    localStorage.setItem('polytracker_wallets', JSON.stringify(state.wallets.map(w => w.address)));
+    localStorage.setItem(LS.WALLETS, JSON.stringify(state.wallets.map(w => w.address)));
 }
 
 // ===========================
@@ -429,8 +440,8 @@ document.addEventListener('click', (e) => {
         state.sortCol = col;
         state.sortAsc = col === 'market' || col === 'outcome';
     }
-    localStorage.setItem('polytracker_sortCol', state.sortCol);
-    localStorage.setItem('polytracker_sortAsc', String(state.sortAsc));
+    localStorage.setItem(LS.SORT_COL, state.sortCol);
+    localStorage.setItem(LS.SORT_ASC, String(state.sortAsc));
 
     // Update group sort only when all groups are collapsed
     if (groupToggle.checked) {
@@ -482,10 +493,10 @@ function updateCountdown() {
     refreshCountdown.textContent = m > 0 ? `${m}:${s.toString().padStart(2, '0')}` : `${s}s`;
 }
 
-refreshSelect.value = localStorage.getItem('polytracker_refreshInterval') || '0';
+refreshSelect.value = localStorage.getItem(LS.REFRESH_INTERVAL) || '0';
 refreshSelect.addEventListener('change', () => {
     const val = parseInt(refreshSelect.value);
-    localStorage.setItem('polytracker_refreshInterval', String(val));
+    localStorage.setItem(LS.REFRESH_INTERVAL, String(val));
     startAutoRefresh(val);
 });
 
@@ -503,10 +514,10 @@ refreshNowBtn.addEventListener('click', () => {
 // ===========================
 //   GROUP TOGGLE
 // ===========================
-groupToggle.checked = localStorage.getItem('polytracker_grouped') === 'true';
+groupToggle.checked = localStorage.getItem(LS.GROUPED) === 'true';
 
 groupToggle.addEventListener('change', () => {
-    localStorage.setItem('polytracker_grouped', groupToggle.checked);
+    localStorage.setItem(LS.GROUPED, groupToggle.checked);
     dispatchRender();
 });
 
@@ -520,7 +531,7 @@ document.addEventListener('click', (e) => {
         const catId = categoryRow.dataset.categoryId;
         const isExpanded = state.expandedCategories[catId] !== false;
         state.expandedCategories[catId] = !isExpanded;
-        localStorage.setItem('polytracker_expanded', JSON.stringify(state.expandedCategories));
+        localStorage.setItem(LS.EXPANDED, JSON.stringify(state.expandedCategories));
 
         // If all collapsed now, restore sort indicator to group sort
         const categoryRows = document.querySelectorAll('.category-row');
@@ -531,8 +542,8 @@ document.addEventListener('click', (e) => {
             const gs = getGroupSort();
             state.sortCol = gs.col;
             state.sortAsc = gs.asc;
-            localStorage.setItem('polytracker_sortCol', state.sortCol);
-            localStorage.setItem('polytracker_sortAsc', String(state.sortAsc));
+            localStorage.setItem(LS.SORT_COL, state.sortCol);
+            localStorage.setItem(LS.SORT_ASC, String(state.sortAsc));
         }
         dispatchRender();
         return;
@@ -710,14 +721,14 @@ window.onload = () => {
     // Migrate old single-wallet storage
     let savedWallets = null;
     try {
-        savedWallets = JSON.parse(localStorage.getItem('polytracker_wallets'));
+        savedWallets = JSON.parse(localStorage.getItem(LS.WALLETS));
     } catch (e) {}
 
     if (!savedWallets) {
-        const old = localStorage.getItem('polytracker_wallet');
+        const old = localStorage.getItem(LS.WALLET_OLD);
         if (old && isValidAddress(old)) {
             savedWallets = [old];
-            localStorage.setItem('polytracker_wallets', JSON.stringify(savedWallets));
+            localStorage.setItem(LS.WALLETS, JSON.stringify(savedWallets));
         }
     }
 
@@ -742,6 +753,6 @@ window.onload = () => {
         refreshAllActivity();
     }
 
-    const savedInterval = parseInt(localStorage.getItem('polytracker_refreshInterval') || '0');
+    const savedInterval = parseInt(localStorage.getItem(LS.REFRESH_INTERVAL) || '0');
     if (savedInterval > 0) startAutoRefresh(savedInterval);
 };

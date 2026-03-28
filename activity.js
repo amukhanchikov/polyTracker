@@ -144,17 +144,20 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
                 </div>
             `;
 
-            if (isExpandable) {
-                li.querySelector('.trade-group-header').addEventListener('click', (e) => {
-                    if (e.target.closest('a')) return; // Don't toggle when clicking market link
-                    li.classList.toggle('expanded');
-                });
-            }
-
             tFrag.appendChild(li);
         });
 
         tradesList.appendChild(tFrag);
+
+        // Single delegated listener for expand/collapse (replaces per-item listeners)
+        tradesList.onclick = (e) => {
+            if (e.target.closest('a')) return;
+            const header = e.target.closest('.trade-group-header');
+            if (!header) return;
+            const item = header.closest('.is-expandable');
+            if (item) item.classList.toggle('expanded');
+        };
+
         if (window.lucide) window.lucide.createIcons({ attrs: {}, nameAttr: 'data-lucide', nodes: [tradesList] });
     } catch (e) {
         if (e.name === 'AbortError') return;
