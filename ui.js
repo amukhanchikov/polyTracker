@@ -214,7 +214,11 @@ export function renderTable(state) {
     // Sort logic
     const sorted = [...filtered].sort((a, b) => comparePositions(a, b, currentSortCol, currentSortAsc));
 
-    const getIconHTML = () => {
+    const getIconHTML = (colStr) => {
+        if (currentSortCol === colStr) {
+            const icon = currentSortAsc ? 'chevron-up' : 'chevron-down';
+            return `<i data-lucide="${icon}" class="sort-icon"></i>`;
+        }
         return `<i data-lucide="chevrons-up-down" class="sort-icon"></i>`;
     };
 
@@ -226,12 +230,12 @@ export function renderTable(state) {
         <table class="positions-table">
             <thead>
                 <tr>
-                    <th data-sort="market" class="${getThClass('market')}" style="width: 40%;">Market ${getIconHTML()}</th>
-                    <th data-sort="currentPrice" class="${getThClass('currentPrice')}" style="width: 12%;">Cur. Price ${getIconHTML()}</th>
-                    <th data-sort="weight" class="${getThClass('weight')}" style="width: 12%;">Weight (%) ${getIconHTML()}</th>
-                    <th data-sort="change1h" class="${getThClass('change1h')}" style="width: 10%;">1h % Δ ${getIconHTML()}</th>
-                    <th data-sort="change24h" class="${getThClass('change24h')}" style="width: 10%;">24h % Δ ${getIconHTML()}</th>
-                    <th data-sort="value" class="${getThClass('value')}" style="width: 16%;">Value (USDC) ${getIconHTML()}</th>
+                    <th data-sort="market" class="${getThClass('market')}" style="width: 40%;">Market ${getIconHTML('market')}</th>
+                    <th data-sort="currentPrice" class="${getThClass('currentPrice')}" style="width: 12%;">Cur. Price ${getIconHTML('currentPrice')}</th>
+                    <th data-sort="weight" class="${getThClass('weight')}" style="width: 12%;">Weight (%) ${getIconHTML('weight')}</th>
+                    <th data-sort="change1h" class="${getThClass('change1h')}" style="width: 10%;">1h % Δ ${getIconHTML('change1h')}</th>
+                    <th data-sort="change24h" class="${getThClass('change24h')}" style="width: 10%;">24h % Δ ${getIconHTML('change24h')}</th>
+                    <th data-sort="value" class="${getThClass('value')}" style="width: 16%;">Value (USDC) ${getIconHTML('value')}</th>
                 </tr>
             </thead>
             <tbody>
