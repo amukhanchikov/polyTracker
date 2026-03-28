@@ -225,7 +225,7 @@ function dispatchRender() {
 // ===========================
 //   LOAD WALLET DATA
 // ===========================
-async function loadWalletData(wallet) {
+async function loadWalletData(wallet, { bypassCache = false } = {}) {
     if (wallet.abortController) wallet.abortController.abort();
     wallet.abortController = new AbortController();
     const { signal } = wallet.abortController;
@@ -287,13 +287,15 @@ async function loadWalletData(wallet) {
 
             const cacheKey = CACHE_PREFIX + p.asset;
             let histData = null;
-            try {
-                const cached = localStorage.getItem(cacheKey);
-                if (cached) {
-                    const parsed = JSON.parse(cached);
-                    if (Date.now() - parsed._ts < CACHE_TTL_MS) histData = parsed;
-                }
-            } catch (e) {}
+            if (!bypassCache) {
+                try {
+                    const cached = localStorage.getItem(cacheKey);
+                    if (cached) {
+                        const parsed = JSON.parse(cached);
+                        if (Date.now() - parsed._ts < CACHE_TTL_MS) histData = parsed;
+                    }
+                } catch (e) {}
+            }
 
             if (!histData) {
                 histData = await throttle(() => getHistoricalMetrics(p.asset, signal));
@@ -350,7 +352,7 @@ function refreshAllActivity() {
 // ===========================
 function refreshAllWallets() {
     for (const wallet of state.wallets) {
-        loadWalletData(wallet);
+        loadWalletData(wallet, { bypassCache: true });
     }
     refreshAllActivity();
 }
