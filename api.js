@@ -1,4 +1,4 @@
-import { MAX_CONCURRENT_REQUESTS, FETCH_TIMEOUT_MS, fetchWithTimeout } from './utils.js';
+import { MAX_CONCURRENT_REQUESTS, FETCH_TIMEOUT_MS, fetchWithTimeout, SECONDS_1H, SECONDS_24H } from './utils.js';
 
 // Polygon RPC endpoints (tried in order, first success wins)
 const POLYGON_RPCS = [
@@ -64,7 +64,7 @@ export async function getUSDCBalance(address, signal) {
 }
 
 // Throttled fetch: limits concurrent requests to avoid 429 rate limits
-export function createThrottledFetcher(concurrency = MAX_CONCURRENT_REQUESTS) {
+function createThrottledFetcher(concurrency = MAX_CONCURRENT_REQUESTS) {
     let active = 0;
     const queue = [];
 
@@ -105,8 +105,8 @@ export async function getHistoricalMetrics(assetId, signal) {
 
             if (!history || history.length === 0) return null;
 
-            const cutoff24h = (Date.now() / 1000) - (24 * 3600);
-            const cutoff1h = (Date.now() / 1000) - 3600;
+            const cutoff24h = (Date.now() / 1000) - SECONDS_24H;
+            const cutoff1h = (Date.now() / 1000) - SECONDS_1H;
             const latestPrice = history[history.length - 1].p;
 
             let histPrice24h = null, histTime24h = null;

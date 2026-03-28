@@ -1,12 +1,4 @@
-import { formatCurrency, escapeHtml, fetchWithTimeout, FETCH_TIMEOUT_MS } from './utils.js';
-
-function formatTime(timestamp) {
-    if (!timestamp) return '';
-    const d = new Date(timestamp * 1000);
-    const h = d.getHours().toString().padStart(2, '0');
-    const m = d.getMinutes().toString().padStart(2, '0');
-    return `${h}:${m}`;
-}
+import { formatCurrency, escapeHtml, fetchWithTimeout, FETCH_TIMEOUT_MS, formatTimeShort as formatTime, SECONDS_24H } from './utils.js';
 
 export async function fetchActivity(addresses, tradesList, elements, signal) {
     const { grossSpentEl, grossCashInEl } = elements;
@@ -32,7 +24,7 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
 
         if (signal && signal.aborted) return;
 
-        const cutoff = (Date.now() / 1000) - (24 * 3600);
+        const cutoff = (Date.now() / 1000) - SECONDS_24H;
         const recent = allActivities.filter(a => a.timestamp && a.timestamp >= cutoff);
 
         const trades = recent.filter(a => a.type === 'TRADE');
@@ -64,7 +56,7 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
         allActivity.forEach(a => {
             const key = a.title || 'Unknown';
             if (!byMarket.has(key)) {
-                byMarket.set(key, { title: key, slug: a.slug || a.eventSlug || '', items: [], totalOut: 0, totalIn: 0 });
+                byMarket.set(key, { title: key, eventSlug: a.eventSlug || '', items: [], totalOut: 0, totalIn: 0 });
             }
             const g = byMarket.get(key);
             g.items.push(a);
@@ -139,8 +131,8 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
                 </div>
                 <div class="trade-details">
                     <div class="trade-group-header">
-                        ${g.slug
-                            ? `<a href="https://polymarket.com/event/${encodeURIComponent(g.slug)}" target="_blank" rel="noopener noreferrer" class="trade-market trade-market-link">${escapeHtml(g.title)}</a>`
+                        ${g.eventSlug
+                            ? `<a href="https://polymarket.com/event/${encodeURIComponent(g.eventSlug)}" target="_blank" rel="noopener noreferrer" class="trade-market trade-market-link">${escapeHtml(g.title)}</a>`
                             : `<span class="trade-market">${escapeHtml(g.title)}</span>`
                         }
                         <span class="trade-count">${countLabel}${isExpandable ? ' <i data-lucide="chevron-down" class="trade-chevron"></i>' : ''}</span>

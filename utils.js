@@ -1,6 +1,7 @@
 // Constants
 export const CACHE_TTL_MS = 300000;        // 5 minutes
-export const RENDER_DEBOUNCE_MS = 150;
+export const SECONDS_1H = 3600;
+export const SECONDS_24H = 86400;
 export const SEARCH_DEBOUNCE_MS = 200;
 export const MAX_CONCURRENT_REQUESTS = 15;
 export const FETCH_TIMEOUT_MS = 20000;     // 20 seconds
@@ -26,6 +27,11 @@ export function showToast(msg, type = 'error') {
 // Formatters
 export const formatCurrency = (val) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(val);
 export const formatPct = (val) => (val > 0 ? '+' : '') + val.toFixed(2) + '%';
+export const formatTimeShort = (ts) => {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+};
 export const formatTime = (ts) => {
     if(!ts) return '';
     const d = new Date(ts * 1000);

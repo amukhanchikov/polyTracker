@@ -15,6 +15,8 @@ const totalPortfolioEl = document.getElementById('total-portfolio');
 const totalValueEl = document.getElementById('total-value');
 const freeUsdcEl = document.getElementById('free-usdc');
 const totalPnlEl = document.getElementById('total-pnl');
+const total24hChangeEl = document.getElementById('total-24h-change');
+const total1hChangeEl = document.getElementById('total-1h-change');
 const positionCountEl = document.getElementById('position-count');
 const grossSpentEl = document.getElementById('gross-spent');
 const grossCashInEl = document.getElementById('gross-cash-in');
@@ -50,8 +52,11 @@ const state = {
 
 let activityAbortController = null;
 
+let _positionsCache = null;
+function invalidatePositionsCache() { _positionsCache = null; }
 function getAllPositions() {
-    return state.wallets.flatMap(w => w.positions);
+    if (!_positionsCache) _positionsCache = state.wallets.flatMap(w => w.positions);
+    return _positionsCache;
 }
 
 function getNextColorIdx() {
@@ -124,11 +129,14 @@ function removeWallet(address) {
     const wallet = state.wallets[idx];
     if (wallet.abortController) wallet.abortController.abort();
     state.wallets.splice(idx, 1);
+    invalidatePositionsCache();
 
     saveWallets();
     renderWalletChips();
 
     if (state.wallets.length === 0) {
+        stopLastUpdatedTicker();
+        state.lastUpdated = null;
         dashboard.classList.add('hidden');
         tableWrapper.innerHTML = '';
         tradesList.innerHTML = '';
@@ -163,11 +171,9 @@ function updateTotalsAndRender() {
     const allFreeUsdc = state.wallets.reduce((s, w) => s + (w.freeUsdc || 0), 0);
     totalPortfolioEl.innerText = formatCurrency(totV + allFreeUsdc);
 
-    const total24hChangeEl = document.getElementById('total-24h-change');
     total24hChangeEl.className = `stat-value ${totChange24h >= 0 ? 'positive' : 'negative'}`;
     total24hChangeEl.innerText = `${totChange24h > 0 ? '+' : ''}${formatCurrency(totChange24h)}`;
 
-    const total1hChangeEl = document.getElementById('total-1h-change');
     total1hChangeEl.className = `stat-value ${totChange1h >= 0 ? 'positive' : 'negative'}`;
     total1hChangeEl.innerText = `${totChange1h > 0 ? '+' : ''}${formatCurrency(totChange1h)}`;
 
@@ -186,11 +192,21 @@ function formatLastUpdated(ts) {
     return `Updated ${Math.floor(min / 60)}h ago`;
 }
 
-setInterval(() => {
-    if (lastUpdatedEl && state.lastUpdated) {
-        lastUpdatedEl.textContent = formatLastUpdated(state.lastUpdated);
+let lastUpdatedIntervalId = null;
+function startLastUpdatedTicker() {
+    if (lastUpdatedIntervalId) return; // already running
+    lastUpdatedIntervalId = setInterval(() => {
+        if (state.lastUpdated) {
+            lastUpdatedEl.textContent = formatLastUpdated(state.lastUpdated);
+        }
+    }, 5000);
+}
+function stopLastUpdatedTicker() {
+    if (lastUpdatedIntervalId) {
+        clearInterval(lastUpdatedIntervalId);
+        lastUpdatedIntervalId = null;
     }
-}, 5000);
+}
 
 function dispatchRender() {
     renderTable({
@@ -233,6 +249,7 @@ async function loadWalletData(wallet) {
 
         const color = WALLET_COLORS[wallet.colorIdx % WALLET_COLORS.length];
 
+        invalidatePositionsCache();
         wallet.positions = positions.map(p => {
             const categoryObj = resolveCategory(p.conditionId, p.title || '', state.customCategories);
             const curPrice = (Number(p.currentValue) || 0) / (parseFloat(p.size) || 1);
@@ -299,6 +316,7 @@ async function loadWalletData(wallet) {
                 updateTotalsAndRender();
                 state.lastUpdated = Date.now();
                 if (lastUpdatedEl) lastUpdatedEl.textContent = formatLastUpdated(state.lastUpdated);
+                startLastUpdatedTicker();
             }
         }).catch(console.error).finally(() => {
             if (refreshBtn) refreshBtn.classList.remove('spinning');
