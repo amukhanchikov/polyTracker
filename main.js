@@ -434,8 +434,10 @@ document.addEventListener('click', (e) => {
 
     // Update group sort only when all groups are collapsed
     if (groupToggle.checked) {
-        const allCollapsed = Object.values(state.expandedCategories).length > 0 &&
-            Object.values(state.expandedCategories).every(v => v === false);
+        const categoryRows = document.querySelectorAll('.category-row');
+        const existingIds = [...categoryRows].map(r => r.dataset.categoryId);
+        const allCollapsed = existingIds.length > 0 &&
+            existingIds.every(id => state.expandedCategories[id] === false);
         if (allCollapsed) {
             setGroupSort(state.sortCol, state.sortAsc);
         }
@@ -521,8 +523,10 @@ document.addEventListener('click', (e) => {
         localStorage.setItem('polytracker_expanded', JSON.stringify(state.expandedCategories));
 
         // If all collapsed now, restore sort indicator to group sort
-        const allCollapsed = Object.values(state.expandedCategories).length > 0 &&
-            Object.values(state.expandedCategories).every(v => v === false);
+        const categoryRows = document.querySelectorAll('.category-row');
+        const existingIds = [...categoryRows].map(r => r.dataset.categoryId);
+        const allCollapsed = existingIds.length > 0 &&
+            existingIds.every(id => state.expandedCategories[id] === false);
         if (allCollapsed) {
             const gs = getGroupSort();
             state.sortCol = gs.col;
