@@ -77,7 +77,7 @@ function generateRowTemplate(p, showWalletBadge) {
             <td>
                 <div class="market-cell">
                     <img src="${p.icon || 'https://polymarket.com/favicon.ico'}" alt="Icon" class="market-img" onerror="this.src='https://polymarket.com/favicon.ico'">
-                    <div>
+                    <div class="market-info">
                         <div class="market-title-wrap">
                             ${showWalletBadge && p.walletColor ? `<span class="wallet-dot wallet-dot--row" style="background:${p.walletColor}" title="${escapeHtml(p.walletAddress || '')}"></span>` : ''}
                             ${p.marketUrl

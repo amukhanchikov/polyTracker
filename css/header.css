@@ -82,6 +82,7 @@ header {
     height: 7px;
     flex-shrink: 0;
     display: inline-block;
+    margin-right: 5px;
 }
 
 .wallet-addr {
