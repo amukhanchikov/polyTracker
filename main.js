@@ -1,12 +1,12 @@
-import { showToast, formatCurrency, escapeHtml, isValidAddress, cleanupOldCache, CACHE_TTL_MS, CACHE_PREFIX, RENDER_DEBOUNCE_MS, SEARCH_DEBOUNCE_MS, fetchWithTimeout, FETCH_TIMEOUT_MS } from './utils.js';
+import { showToast, formatCurrency, escapeHtml, isValidAddress, cleanupOldCache, CACHE_TTL_MS, CACHE_PREFIX, SEARCH_DEBOUNCE_MS, fetchWithTimeout, FETCH_TIMEOUT_MS } from './utils.js';
 import { getHistoricalMetrics, throttle, getUSDCBalance } from './api.js';
 import { loadCustomCategories, saveCustomCategories, resolveCategory } from './categoryManager.js';
 import { showSkeleton, calculateTotalVal, renderTable } from './ui.js';
 import { fetchActivity } from './activity.js';
 
 // DOM Elements
-const searchInput = document.getElementById('wallet-input');
-const searchBtn = document.getElementById('search-btn');
+const walletInput = document.getElementById('wallet-input');
+const addWalletBtn = document.getElementById('add-wallet-btn');
 const loadingOverlay = document.getElementById('loading');
 const dashboard = document.getElementById('dashboard');
 
@@ -32,20 +32,147 @@ const cancelCategoryBtn = document.getElementById('cancel-category');
 const clearCategoryInputBtn = document.getElementById('clear-category-input');
 const categoryTagsCloud = document.getElementById('category-tags-cloud');
 
+// Wallet colors — up to 6 distinct wallets
+const WALLET_COLORS = ['#58a6ff', '#3fb950', '#ffa657', '#d2a8ff', '#ff7b72', '#79c0ff'];
+
 // Consolidated Application State
 const state = {
     customCategories: loadCustomCategories(),
     activeEditConditionId: null,
     activeBulkOldLabel: null,
-    positions: [],
+    wallets: [], // [{ address, colorIdx, positions, freeUsdc, abortController }]
     sortCol: localStorage.getItem('polytracker_sortCol') || 'value',
     sortAsc: localStorage.getItem('polytracker_sortAsc') === 'true',
     expandedCategories: JSON.parse(localStorage.getItem('polytracker_expanded') || '{}'),
     searchFilter: '',
-    abortController: null,
     lastUpdated: null,
-    freeUsdc: null,
 };
+
+let activityAbortController = null;
+
+function getAllPositions() {
+    return state.wallets.flatMap(w => w.positions);
+}
+
+function getNextColorIdx() {
+    const used = new Set(state.wallets.map(w => w.colorIdx));
+    for (let i = 0; i < WALLET_COLORS.length; i++) {
+        if (!used.has(i)) return i;
+    }
+    return state.wallets.length % WALLET_COLORS.length;
+}
+
+function saveWallets() {
+    localStorage.setItem('polytracker_wallets', JSON.stringify(state.wallets.map(w => w.address)));
+}
+
+// ===========================
+//   WALLET CHIP UI
+// ===========================
+function renderWalletChips() {
+    const chipsEl = document.getElementById('wallet-chips');
+    if (!chipsEl) return;
+
+    chipsEl.innerHTML = state.wallets.map(w => {
+        const color = WALLET_COLORS[w.colorIdx % WALLET_COLORS.length];
+        const short = w.address.slice(0, 6) + '…' + w.address.slice(-4);
+        return `<span class="wallet-chip" data-address="${escapeHtml(w.address)}">
+            <span class="wallet-dot" style="background:${color}"></span>
+            <span class="wallet-addr" title="${escapeHtml(w.address)}">${escapeHtml(short)}</span>
+            <button class="wallet-chip-remove" data-action="remove-wallet" data-address="${escapeHtml(w.address)}" title="Remove wallet">×</button>
+        </span>`;
+    }).join('');
+
+    // Show/hide chips container
+    chipsEl.classList.toggle('has-chips', state.wallets.length > 0);
+}
+
+// ===========================
+//   ADD / REMOVE WALLETS
+// ===========================
+function addWallet(address) {
+    const norm = address.toLowerCase();
+    if (state.wallets.find(w => w.address.toLowerCase() === norm)) {
+        showToast('This wallet is already being tracked', 'error');
+        return;
+    }
+
+    const wallet = {
+        address,
+        colorIdx: getNextColorIdx(),
+        positions: [],
+        freeUsdc: null,
+        abortController: null,
+    };
+    state.wallets.push(wallet);
+    saveWallets();
+    renderWalletChips();
+
+    dashboard.classList.remove('hidden');
+    loadingOverlay.classList.add('hidden');
+
+    if (getAllPositions().length === 0) showSkeleton(tableWrapper);
+
+    loadWalletData(wallet);
+    refreshAllActivity();
+}
+
+function removeWallet(address) {
+    const idx = state.wallets.findIndex(w => w.address.toLowerCase() === address.toLowerCase());
+    if (idx === -1) return;
+
+    const wallet = state.wallets[idx];
+    if (wallet.abortController) wallet.abortController.abort();
+    state.wallets.splice(idx, 1);
+
+    saveWallets();
+    renderWalletChips();
+
+    if (state.wallets.length === 0) {
+        dashboard.classList.add('hidden');
+        tableWrapper.innerHTML = '';
+        tradesList.innerHTML = '';
+        totalValueEl.innerText = '$0.00';
+        totalPortfolioEl.innerText = '$0.00';
+        freeUsdcEl.innerHTML = '<span class="stat-loading-dots">···</span>';
+        totalPnlEl.innerText = '$0.00';
+        positionCountEl.innerText = '0';
+    } else {
+        updateTotalsAndRender();
+        refreshAllActivity();
+    }
+}
+
+// ===========================
+//   TOTALS & RENDER
+// ===========================
+function updateTotalsAndRender() {
+    const allPositions = getAllPositions();
+    const { totV, totP, totChange24h, totChange1h } = calculateTotalVal(allPositions);
+
+    allPositions.forEach(p => {
+        p.weight = totV > 0 ? ((p.currentValue || 0) / totV) * 100 : 0;
+    });
+
+    dispatchRender();
+
+    totalValueEl.innerText = formatCurrency(totV);
+    totalPnlEl.className = `stat-value ${totP >= 0 ? 'positive' : 'negative'}`;
+    totalPnlEl.innerText = formatCurrency(totP);
+
+    const allFreeUsdc = state.wallets.reduce((s, w) => s + (w.freeUsdc || 0), 0);
+    totalPortfolioEl.innerText = formatCurrency(totV + allFreeUsdc);
+
+    const total24hChangeEl = document.getElementById('total-24h-change');
+    total24hChangeEl.className = `stat-value ${totChange24h >= 0 ? 'positive' : 'negative'}`;
+    total24hChangeEl.innerText = `${totChange24h > 0 ? '+' : ''}${formatCurrency(totChange24h)}`;
+
+    const total1hChangeEl = document.getElementById('total-1h-change');
+    total1hChangeEl.className = `stat-value ${totChange1h >= 0 ? 'positive' : 'negative'}`;
+    total1hChangeEl.innerText = `${totChange1h > 0 ? '+' : ''}${formatCurrency(totChange1h)}`;
+
+    positionCountEl.innerText = allPositions.length;
+}
 
 const lastUpdatedEl = document.getElementById('last-updated');
 
@@ -65,66 +192,48 @@ setInterval(() => {
     }
 }, 5000);
 
-// Helper to trigger UI render with full state
 function dispatchRender() {
     renderTable({
         tableWrapper,
         positionCountEl,
         isGrouped: groupToggle.checked,
         searchFilter: state.searchFilter,
-        currentPositionsData: state.positions,
+        currentPositionsData: getAllPositions(),
         currentSortCol: state.sortCol,
         currentSortAsc: state.sortAsc,
-        expandedCategories: state.expandedCategories
+        expandedCategories: state.expandedCategories,
+        showWalletBadge: state.wallets.length > 1,
     });
 }
 
-// Fetch and Render Data
-async function analyzeWallet(address) {
-    // Cancel any in-flight requests from previous call
-    if (state.abortController) {
-        state.abortController.abort();
-    }
-    state.abortController = new AbortController();
-    const { signal } = state.abortController;
+// ===========================
+//   LOAD WALLET DATA
+// ===========================
+async function loadWalletData(wallet) {
+    if (wallet.abortController) wallet.abortController.abort();
+    wallet.abortController = new AbortController();
+    const { signal } = wallet.abortController;
 
-    // UI State — show skeleton immediately, no spinner overlay
-    dashboard.classList.remove('hidden');
-    loadingOverlay.classList.add('hidden');
-    showSkeleton(tableWrapper);
-
-    // Start spinner on refresh button
     const refreshBtn = document.getElementById('refresh-now-btn');
     if (refreshBtn) refreshBtn.classList.add('spinning');
 
-    tradesList.innerHTML = '';
-
     try {
-        // Fetch Activity (Parallelized)
-        const activityPromise = fetchActivity(address, tradesList, {
-            grossSpentEl, grossCashInEl
-        }, signal);
-
-        // Fetch Positions
         const posRes = await fetchWithTimeout(
-            `https://data-api.polymarket.com/positions?user=${address}`,
+            `https://data-api.polymarket.com/positions?user=${wallet.address}`,
             FETCH_TIMEOUT_MS,
             signal
         );
-        if (!posRes.ok) throw new Error("Failed to fetch positions");
+        if (!posRes.ok) throw new Error('Failed to fetch positions');
         const allPositions = await posRes.json();
 
-        // Check if aborted while awaiting
         if (signal.aborted) return;
 
-        // Filter Open Positions
         const positions = allPositions.filter(p => p.size > 0 && p.currentValue > 0);
-        positions.sort((a,b) => (b.currentValue || 0) - (a.currentValue || 0));
+        positions.sort((a, b) => (b.currentValue || 0) - (a.currentValue || 0));
 
-        positionCountEl.innerText = positions.length;
+        const color = WALLET_COLORS[wallet.colorIdx % WALLET_COLORS.length];
 
-        // Process basic position data instantly
-        const positionRowsData = positions.map(p => {
+        wallet.positions = positions.map(p => {
             const categoryObj = resolveCategory(p.conditionId, p.title || '', state.customCategories);
             const curPrice = (Number(p.currentValue) || 0) / (parseFloat(p.size) || 1);
             const entryPrice = parseFloat(p.avgPrice) || 0;
@@ -135,60 +244,28 @@ async function analyzeWallet(address) {
 
             return {
                 ...p,
+                walletAddress: wallet.address,
+                walletColor: color,
                 pctChange24h: null, histPrice: null, histTime: null,
                 pctChange1h: null, hist1hPrice: null, hist1hTime: null,
-                curPrice, roi, category: categoryObj, marketUrl
+                curPrice, roi, category: categoryObj, marketUrl,
             };
         });
 
-        state.positions = positionRowsData;
-        state.freeUsdc = null; // Will be filled async
-
-        const updateTotalsAndRender = () => {
-            if (signal.aborted) return;
-            const { totV, totP, totChange24h, totChange1h } = calculateTotalVal(state.positions);
-            state.positions.forEach(p => {
-                p.weight = totV > 0 ? ((p.currentValue || 0) / totV) * 100 : 0;
-            });
-
-            dispatchRender();
-
-            totalValueEl.innerText = formatCurrency(totV);
-            totalPnlEl.className = `stat-value ${totP >= 0 ? 'positive' : 'negative'}`;
-            totalPnlEl.innerText = formatCurrency(totP);
-
-            // Total portfolio = positions + free USDC (if loaded)
-            const totalPortfolio = totV + (state.freeUsdc || 0);
-            totalPortfolioEl.innerText = formatCurrency(totalPortfolio);
-
-            const total24hChangeEl = document.getElementById('total-24h-change');
-            total24hChangeEl.className = `stat-value ${totChange24h >= 0 ? 'positive' : 'negative'}`;
-            total24hChangeEl.innerText = `${totChange24h > 0 ? '+' : ''}${formatCurrency(totChange24h)}`;
-
-            const total1hChangeEl = document.getElementById('total-1h-change');
-            total1hChangeEl.className = `stat-value ${totChange1h >= 0 ? 'positive' : 'negative'}`;
-            total1hChangeEl.innerText = `${totChange1h > 0 ? '+' : ''}${formatCurrency(totChange1h)}`;
-        };
-
-        // Render immediately with current values
         updateTotalsAndRender();
 
-        // Fetch free USDC balance from Polygon in background
-        getUSDCBalance(address, signal).then(balance => {
+        // Fetch free USDC in background
+        getUSDCBalance(wallet.address, signal).then(balance => {
             if (signal.aborted) return;
-            state.freeUsdc = balance;
-            if (balance !== null) {
-                freeUsdcEl.innerText = formatCurrency(balance);
-                // Update total portfolio card
-                const { totV } = calculateTotalVal(state.positions);
-                totalPortfolioEl.innerText = formatCurrency(totV + balance);
-            } else {
-                freeUsdcEl.innerText = 'N/A';
-            }
+            wallet.freeUsdc = balance;
+            const allFreeUsdc = state.wallets.reduce((s, w) => s + (w.freeUsdc || 0), 0);
+            const { totV } = calculateTotalVal(getAllPositions());
+            freeUsdcEl.innerText = allFreeUsdc > 0 ? formatCurrency(allFreeUsdc) : (balance === null ? 'N/A' : '$0.00');
+            totalPortfolioEl.innerText = formatCurrency(totV + allFreeUsdc);
         });
 
-        // Background load historical metrics — single render after all complete
-        Promise.all(state.positions.map(async p => {
+        // Load historical metrics in background
+        Promise.all(wallet.positions.map(async p => {
             if (signal.aborted) return;
 
             const cacheKey = CACHE_PREFIX + p.asset;
@@ -199,12 +276,12 @@ async function analyzeWallet(address) {
                     const parsed = JSON.parse(cached);
                     if (Date.now() - parsed._ts < CACHE_TTL_MS) histData = parsed;
                 }
-            } catch(e) {}
+            } catch (e) {}
 
             if (!histData) {
                 histData = await throttle(() => getHistoricalMetrics(p.asset, signal));
                 if (histData) {
-                    try { localStorage.setItem(cacheKey, JSON.stringify({ ...histData, _ts: Date.now() })); } catch(e) {}
+                    try { localStorage.setItem(cacheKey, JSON.stringify({ ...histData, _ts: Date.now() })); } catch (e) {}
                 }
             }
 
@@ -214,8 +291,6 @@ async function analyzeWallet(address) {
                 p.hist1hPrice = histData.price1h;
                 p.hist1hTime = histData.time1h;
                 p.sparkline = histData.sparkline || null;
-
-                // Use pre-calculated pct from api.js (null when window not covered → shows N/A)
                 p.pctChange24h = histData.pct24h ?? null;
                 p.pctChange1h  = histData.pct1h  ?? null;
             }
@@ -229,42 +304,69 @@ async function analyzeWallet(address) {
             if (refreshBtn) refreshBtn.classList.remove('spinning');
         });
 
-        await activityPromise;
-
     } catch (e) {
         if (e.name === 'AbortError') return;
-        showToast('Error fetching data. Ensure the wallet address is correct.', 'error');
+        const short = wallet.address.slice(0, 8) + '…';
+        showToast(`Error fetching ${short}. Check the address and try again.`, 'error');
         console.error(e);
-    } finally {
-        loadingOverlay.classList.add('hidden');
-        localStorage.setItem('polytracker_wallet', address);
+        if (refreshBtn) refreshBtn.classList.remove('spinning');
     }
 }
 
-// Event Listeners — Wallet Search
-searchBtn.addEventListener('click', () => {
-    const val = searchInput.value.trim();
+// ===========================
+//   ACTIVITY (ALL WALLETS)
+// ===========================
+function refreshAllActivity() {
+    if (activityAbortController) activityAbortController.abort();
+    activityAbortController = new AbortController();
+
+    const addresses = state.wallets.map(w => w.address);
+    if (addresses.length === 0) return;
+
+    tradesList.innerHTML = '';
+    fetchActivity(addresses, tradesList, { grossSpentEl, grossCashInEl }, activityAbortController.signal);
+}
+
+// ===========================
+//   REFRESH ALL WALLETS
+// ===========================
+function refreshAllWallets() {
+    for (const wallet of state.wallets) {
+        loadWalletData(wallet);
+    }
+    refreshAllActivity();
+}
+
+// ===========================
+//   INPUT HANDLERS
+// ===========================
+function handleAddWallet() {
+    const val = walletInput.value.trim();
     if (!val) return;
     if (!isValidAddress(val)) {
-        showToast('Invalid wallet address. Expected format: 0x... (42 characters)', 'error');
+        showToast('Invalid wallet address. Expected format: 0x… (42 characters)', 'error');
         return;
     }
-    analyzeWallet(val);
+    addWallet(val);
+    walletInput.value = '';
+}
+
+addWalletBtn.addEventListener('click', handleAddWallet);
+walletInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') handleAddWallet();
 });
 
-searchInput.addEventListener('keypress', (e) => {
-    if(e.key === 'Enter') {
-        const val = searchInput.value.trim();
-        if (!val) return;
-        if (!isValidAddress(val)) {
-            showToast('Invalid wallet address. Expected format: 0x... (42 characters)', 'error');
-            return;
-        }
-        analyzeWallet(val);
+// Remove wallet via chip × button
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-action="remove-wallet"]');
+    if (btn) {
+        removeWallet(btn.dataset.address);
     }
 });
 
-// Position Search Filter
+// ===========================
+//   POSITION SEARCH FILTER
+// ===========================
 const positionSearchInput = document.getElementById('position-search');
 const clearSearchBtn = document.getElementById('clear-search');
 let searchDebounce = null;
@@ -293,7 +395,9 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
-// Column Sorting — via event delegation
+// ===========================
+//   COLUMN SORTING
+// ===========================
 document.addEventListener('click', (e) => {
     const th = e.target.closest('th.sortable');
     if (!th) return;
@@ -303,14 +407,16 @@ document.addEventListener('click', (e) => {
         state.sortAsc = !state.sortAsc;
     } else {
         state.sortCol = col;
-        state.sortAsc = col === 'market' || col === 'outcome'; // Default asc for strings
+        state.sortAsc = col === 'market' || col === 'outcome';
     }
     localStorage.setItem('polytracker_sortCol', state.sortCol);
     localStorage.setItem('polytracker_sortAsc', String(state.sortAsc));
     dispatchRender();
 });
 
-// Auto-refresh timer
+// ===========================
+//   AUTO-REFRESH TIMER
+// ===========================
 const refreshSelect = document.getElementById('auto-refresh-select');
 const refreshCountdown = document.getElementById('refresh-countdown');
 let refreshTimer = null;
@@ -329,8 +435,7 @@ function startAutoRefresh(intervalSec) {
     }, 1000);
     refreshTimer = setInterval(() => {
         countdownSec = intervalSec;
-        const addr = searchInput.value.trim();
-        if (addr) analyzeWallet(addr);
+        if (state.wallets.length > 0) refreshAllWallets();
     }, intervalSec * 1000);
 }
 
@@ -343,7 +448,7 @@ function stopAutoRefresh() {
 function updateCountdown() {
     const m = Math.floor(countdownSec / 60);
     const s = countdownSec % 60;
-    refreshCountdown.textContent = m > 0 ? `${m}:${s.toString().padStart(2,'0')}` : `${s}s`;
+    refreshCountdown.textContent = m > 0 ? `${m}:${s.toString().padStart(2, '0')}` : `${s}s`;
 }
 
 refreshSelect.value = localStorage.getItem('polytracker_refreshInterval') || '0';
@@ -353,22 +458,20 @@ refreshSelect.addEventListener('change', () => {
     startAutoRefresh(val);
 });
 
-// Instant refresh button
 const refreshNowBtn = document.getElementById('refresh-now-btn');
 refreshNowBtn.addEventListener('click', () => {
-    const addr = searchInput.value.trim();
-    if (!addr) return;
-
-    // Reset countdown if auto-refresh active
+    if (state.wallets.length === 0) return;
     const interval = parseInt(refreshSelect.value);
     if (interval > 0) {
         countdownSec = interval;
         startAutoRefresh(interval);
     }
-    analyzeWallet(addr);
+    refreshAllWallets();
 });
 
-// Init state from local storage
+// ===========================
+//   GROUP TOGGLE
+// ===========================
 groupToggle.checked = localStorage.getItem('polytracker_grouped') === 'true';
 
 groupToggle.addEventListener('change', () => {
@@ -378,14 +481,13 @@ groupToggle.addEventListener('change', () => {
     dispatchRender();
 });
 
-// === Event Delegation for table actions (replaces window.* globals) ===
+// ===========================
+//   TABLE ACTION DELEGATION
+// ===========================
 document.addEventListener('click', (e) => {
-    // Toggle category expand/collapse
     const categoryRow = e.target.closest('[data-action="toggle-category"]');
     if (categoryRow) {
-        // Ignore if click was on the rename button
         if (e.target.closest('[data-action="bulk-rename"]')) return;
-
         const catId = categoryRow.dataset.categoryId;
         const isExpanded = state.expandedCategories[catId] !== false;
         state.expandedCategories[catId] = !isExpanded;
@@ -394,7 +496,6 @@ document.addEventListener('click', (e) => {
         return;
     }
 
-    // Edit category for single position
     const editBtn = e.target.closest('[data-action="edit-category"]');
     if (editBtn) {
         const conditionId = decodeURIComponent(editBtn.dataset.condition || '');
@@ -404,7 +505,6 @@ document.addEventListener('click', (e) => {
         return;
     }
 
-    // Bulk rename category
     const renameBtn = e.target.closest('[data-action="bulk-rename"]');
     if (renameBtn) {
         e.stopPropagation();
@@ -413,7 +513,6 @@ document.addEventListener('click', (e) => {
         return;
     }
 
-    // Category tag selection in modal
     const tagBtn = e.target.closest('[data-action="select-tag"]');
     if (tagBtn) {
         categoryInput.value = tagBtn.dataset.label || '';
@@ -422,7 +521,9 @@ document.addEventListener('click', (e) => {
     }
 });
 
-// === Category Modal Functions ===
+// ===========================
+//   CATEGORY MODAL
+// ===========================
 function openCategoryModal(conditionId, title, currentCat) {
     state.activeEditConditionId = conditionId;
     state.activeBulkOldLabel = null;
@@ -433,29 +534,20 @@ function openCategoryModal(conditionId, title, currentCat) {
     categoryModal.setAttribute('role', 'dialog');
     categoryModal.setAttribute('aria-modal', 'true');
 
-    setTimeout(() => {
-        categoryInput.focus();
-        categoryInput.select();
-    }, 50);
-
+    setTimeout(() => { categoryInput.focus(); categoryInput.select(); }, 50);
     buildCategoryTagsCloud(initialVal);
 }
 
 function openBulkRenameModal(oldLabel) {
     state.activeBulkOldLabel = oldLabel;
     state.activeEditConditionId = null;
-    const titleText = `Renaming all positions in "${oldLabel}"`;
-    modalMarketTitle.innerText = titleText;
+    modalMarketTitle.innerText = `Renaming all positions in "${oldLabel}"`;
     categoryInput.value = oldLabel;
     categoryModal.classList.remove('hidden');
     categoryModal.setAttribute('role', 'dialog');
     categoryModal.setAttribute('aria-modal', 'true');
 
-    setTimeout(() => {
-        categoryInput.focus();
-        categoryInput.select();
-    }, 50);
-
+    setTimeout(() => { categoryInput.focus(); categoryInput.select(); }, 50);
     buildCategoryTagsCloud(oldLabel);
 }
 
@@ -463,7 +555,7 @@ function buildCategoryTagsCloud(initialVal) {
     if (!categoryTagsCloud) return;
 
     const usedLabels = new Set();
-    state.positions.forEach(p => {
+    getAllPositions().forEach(p => {
         if (p.category && p.category.label && p.category.label !== 'Other') {
             usedLabels.add(p.category.label);
         }
@@ -511,9 +603,10 @@ cancelCategoryBtn.addEventListener('click', closeCategoryModal);
 
 saveCategoryBtn.addEventListener('click', () => {
     const newCat = categoryInput.value.trim();
+    const allPositions = getAllPositions();
 
     if (state.activeBulkOldLabel) {
-        state.positions.forEach(p => {
+        allPositions.forEach(p => {
             if (p.category && p.category.label === state.activeBulkOldLabel) {
                 if (newCat) state.customCategories[p.conditionId] = newCat;
                 else delete state.customCategories[p.conditionId];
@@ -530,19 +623,19 @@ saveCategoryBtn.addEventListener('click', () => {
     saveCustomCategories(state.customCategories);
     closeCategoryModal();
 
-    for (let p of state.positions) {
-        p.category = resolveCategory(p.conditionId, p.title, state.customCategories);
+    for (const w of state.wallets) {
+        for (const p of w.positions) {
+            p.category = resolveCategory(p.conditionId, p.title, state.customCategories);
+        }
     }
 
     dispatchRender();
 });
 
-// Close modal on backdrop click
 categoryModal.addEventListener('click', (e) => {
     if (e.target === categoryModal) closeCategoryModal();
 });
 
-// Close modal on Escape key
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && !categoryModal.classList.contains('hidden')) {
         closeCategoryModal();
@@ -553,37 +646,58 @@ categoryInput.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') saveCategoryBtn.click();
 });
 
-// Focus trap for modal accessibility
 categoryModal.addEventListener('keydown', (e) => {
     if (e.key !== 'Tab') return;
     const focusable = categoryModal.querySelectorAll('input, button:not([disabled])');
     if (focusable.length === 0) return;
-
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
-
     if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
+        e.preventDefault(); last.focus();
     } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
+        e.preventDefault(); first.focus();
     }
 });
 
-// Auto-run on load
+// ===========================
+//   AUTO-RUN ON LOAD
+// ===========================
 window.onload = () => {
-    // Cleanup old cache entries
     cleanupOldCache();
 
-    const savedWallet = localStorage.getItem('polytracker_wallet');
-    const inputVal = searchInput.value.trim();
+    // Migrate old single-wallet storage
+    let savedWallets = null;
+    try {
+        savedWallets = JSON.parse(localStorage.getItem('polytracker_wallets'));
+    } catch (e) {}
 
-    if (inputVal) {
-        analyzeWallet(inputVal);
-    } else if (savedWallet) {
-        searchInput.value = savedWallet;
-        analyzeWallet(savedWallet);
+    if (!savedWallets) {
+        const old = localStorage.getItem('polytracker_wallet');
+        if (old && isValidAddress(old)) {
+            savedWallets = [old];
+            localStorage.setItem('polytracker_wallets', JSON.stringify(savedWallets));
+        }
+    }
+
+    if (Array.isArray(savedWallets) && savedWallets.length > 0) {
+        // Re-hydrate wallets without triggering fetches individually yet
+        savedWallets.forEach(addr => {
+            if (!isValidAddress(addr)) return;
+            state.wallets.push({
+                address: addr,
+                colorIdx: getNextColorIdx(),
+                positions: [],
+                freeUsdc: null,
+                abortController: null,
+            });
+        });
+        renderWalletChips();
+
+        dashboard.classList.remove('hidden');
+        showSkeleton(tableWrapper);
+
+        state.wallets.forEach(w => loadWalletData(w));
+        refreshAllActivity();
     }
 
     const savedInterval = parseInt(localStorage.getItem('polytracker_refreshInterval') || '0');

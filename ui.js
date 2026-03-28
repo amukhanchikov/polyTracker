@@ -54,7 +54,7 @@ export function calculateTotalVal(currentPositionsData) {
     return { totV, totP, totChange24h, totChange1h };
 }
 
-function generateRowTemplate(p) {
+function generateRowTemplate(p, showWalletBadge) {
     const pnlClass = p.cashPnl >= 0 ? 'value-positive' : 'value-negative';
     const roiClass = p.roi >= 0 ? 'value-positive' : 'value-negative';
     const change1hClass = p.pctChange1h !== null ? (p.pctChange1h >= 0 ? 'value-positive' : 'value-negative') : '';
@@ -79,6 +79,7 @@ function generateRowTemplate(p) {
                     <img src="${p.icon || 'https://polymarket.com/favicon.ico'}" alt="Icon" class="market-img" onerror="this.src='https://polymarket.com/favicon.ico'">
                     <div>
                         <div class="market-title-wrap">
+                            ${showWalletBadge && p.walletColor ? `<span class="wallet-dot wallet-dot--row" style="background:${p.walletColor}" title="${escapeHtml(p.walletAddress || '')}"></span>` : ''}
                             ${p.marketUrl
                                 ? `<a href="${escapeHtml(p.marketUrl)}" target="_blank" rel="noopener noreferrer" class="market-title" title="${safeTitle}" style="color: inherit; text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${safeTitle}</a>`
                                 : `<div class="market-title" title="${safeTitle}">${safeTitle}</div>`
@@ -174,7 +175,8 @@ export function renderTable(state) {
         currentPositionsData,
         currentSortCol,
         currentSortAsc,
-        expandedCategories
+        expandedCategories,
+        showWalletBadge,
     } = state;
 
     // Preserve height to prevent scroll jumping
@@ -293,7 +295,7 @@ export function renderTable(state) {
             `;
             if (isExpanded) {
                 for (const p of g.items) {
-                    finalHTML += generateRowTemplate(p);
+                    finalHTML += generateRowTemplate(p, showWalletBadge);
                 }
             }
         }
@@ -301,7 +303,7 @@ export function renderTable(state) {
     } else {
         finalHTML += tableHTMLStart;
         for (const p of sorted) {
-            finalHTML += generateRowTemplate(p);
+            finalHTML += generateRowTemplate(p, showWalletBadge);
         }
         finalHTML += `</tbody></table>`;
     }

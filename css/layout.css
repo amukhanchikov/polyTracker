@@ -151,6 +151,11 @@
     gap: 1.5rem;
 }
 
+.table-section,
+.activity-section {
+    min-width: 0;
+}
+
 .section-header {
     margin-bottom: 1.5rem;
 }

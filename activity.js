@@ -1,18 +1,39 @@
 import { formatCurrency, escapeHtml, fetchWithTimeout, FETCH_TIMEOUT_MS } from './utils.js';
 
-export async function fetchActivity(address, tradesList, elements, signal) {
+function formatTime(timestamp) {
+    if (!timestamp) return '';
+    const d = new Date(timestamp * 1000);
+    const h = d.getHours().toString().padStart(2, '0');
+    const m = d.getMinutes().toString().padStart(2, '0');
+    return `${h}:${m}`;
+}
+
+export async function fetchActivity(addresses, tradesList, elements, signal) {
     const { grossSpentEl, grossCashInEl } = elements;
+    const addrList = Array.isArray(addresses) ? addresses : [addresses];
 
     try {
-        const actRes = await fetchWithTimeout(
-            `https://data-api.polymarket.com/activity?user=${address}&limit=200`,
-            FETCH_TIMEOUT_MS,
-            signal
-        );
-        if (!actRes.ok) return null;
-        const activities = await actRes.json();
+        // Fetch activity for all wallets in parallel
+        const allActivities = [];
+        await Promise.all(addrList.map(async addr => {
+            try {
+                const res = await fetchWithTimeout(
+                    `https://data-api.polymarket.com/activity?user=${addr}&limit=200`,
+                    FETCH_TIMEOUT_MS,
+                    signal
+                );
+                if (!res.ok) return;
+                const acts = await res.json();
+                allActivities.push(...acts);
+            } catch (e) {
+                if (e.name !== 'AbortError') console.warn(`Activity fetch failed for ${addr}`, e);
+            }
+        }));
+
+        if (signal && signal.aborted) return;
+
         const cutoff = (Date.now() / 1000) - (24 * 3600);
-        const recent = activities.filter(a => a.timestamp && a.timestamp >= cutoff);
+        const recent = allActivities.filter(a => a.timestamp && a.timestamp >= cutoff);
 
         const trades = recent.filter(a => a.type === 'TRADE');
         const redeems = recent.filter(a => a.type === 'REDEEM');
@@ -66,8 +87,8 @@ export async function fetchActivity(address, tradesList, elements, signal) {
         const groups = [...byMarket.values()]
             .sort((a, b) => (b.totalOut + b.totalIn) - (a.totalOut + a.totalIn));
 
-        const tFrag = document.createDocumentFragment();
         tradesList.innerHTML = '';
+        const tFrag = document.createDocumentFragment();
 
         groups.forEach(g => {
             const net = g.totalIn - g.totalOut;
@@ -75,12 +96,37 @@ export async function fetchActivity(address, tradesList, elements, signal) {
             const count = g.items.length;
             const countLabel = count === 1 ? '1 trade' : `${count} trades`;
             const hasRedeem = g.items.some(i => i.type === 'REDEEM');
+            const isExpandable = count > 1;
 
             const iconName  = hasRedeem ? 'trophy' : (isPositive ? 'arrow-up-right' : 'arrow-down-left');
             const iconClass = hasRedeem ? 'redeem'  : (isPositive ? 'sell' : 'buy');
 
+            // Build sub-rows for individual trades
+            const subRowsHTML = g.items
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                .map(item => {
+                    const isBuy    = item.type === 'TRADE' && item.side === 'BUY';
+                    const isRedeem = item.type === 'REDEEM';
+                    const amount   = Number(item.usdcSize || item.usdcValue || 0);
+                    const subIcon  = isRedeem ? 'trophy' : (isBuy ? 'arrow-down-left' : 'arrow-up-right');
+                    const subClass = isRedeem ? 'redeem' : (isBuy ? 'buy' : 'sell');
+                    const sign     = isBuy ? '-' : '+';
+                    const amtClass = isBuy ? 'negative' : 'positive';
+                    const outcome  = escapeHtml(item.outcome || '');
+                    const time     = formatTime(item.timestamp);
+                    return `
+                        <div class="trade-sub-row">
+                            <div class="trade-icon trade-icon--sm ${subClass}">
+                                <i data-lucide="${subIcon}"></i>
+                            </div>
+                            <span class="trade-sub-outcome">${outcome}</span>
+                            <span class="trade-sub-time">${time}</span>
+                            <span class="trade-sub-amount ${amtClass}">${sign}${formatCurrency(amount)}</span>
+                        </div>`;
+                }).join('');
+
             const li = document.createElement('li');
-            li.className = 'trade-item trade-group';
+            li.className = `trade-item trade-group${isExpandable ? ' is-expandable' : ''}`;
             li.innerHTML = `
                 <div class="trade-icon ${iconClass}">
                     <i data-lucide="${iconName}"></i>
@@ -89,16 +135,25 @@ export async function fetchActivity(address, tradesList, elements, signal) {
                     <div class="trade-group-header">
                         <span class="trade-market">${escapeHtml(g.title)}</span>
                         <span class="trade-count">${countLabel}</span>
+                        ${isExpandable ? '<i data-lucide="chevron-down" class="trade-chevron"></i>' : ''}
                         <span class="trade-net ${isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${formatCurrency(net)}</span>
                     </div>
+                    ${isExpandable ? `<div class="trade-sub-list">${subRowsHTML}</div>` : ''}
                 </div>
             `;
+
+            if (isExpandable) {
+                li.querySelector('.trade-group-header').addEventListener('click', () => {
+                    li.classList.toggle('expanded');
+                });
+            }
+
             tFrag.appendChild(li);
         });
 
         tradesList.appendChild(tFrag);
         if (window.lucide) window.lucide.createIcons({ attrs: {}, nameAttr: 'data-lucide', nodes: [tradesList] });
-    } catch(e) {
+    } catch (e) {
         if (e.name === 'AbortError') return;
         console.error('Activity fetch failed', e);
     }

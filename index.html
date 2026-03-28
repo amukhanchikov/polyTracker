@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PolyTracker | Premium Portfolio Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/main.css?v=2">
     <script src="https://unpkg.com/lucide@latest"></script>
     <link rel="icon" type="image/png" href="favicon.png">
 </head>
@@ -20,10 +20,13 @@
                 <i data-lucide="layers"></i>
                 <h1>PolyTracker</h1>
             </div>
-            <div class="search-bar">
-                <i data-lucide="search"></i>
-                <input type="text" id="wallet-input" placeholder="Enter Polymarket Proxy Wallet (0x...)">
-                <button id="search-btn">Analyze</button>
+            <div class="wallet-manager">
+                <div id="wallet-chips" class="wallet-chips"></div>
+                <div class="wallet-add-row">
+                    <i data-lucide="plus-circle"></i>
+                    <input type="text" id="wallet-input" placeholder="Add wallet (0x...)">
+                    <button id="add-wallet-btn">Add</button>
+                </div>
             </div>
         </header>
 
