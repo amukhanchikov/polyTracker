@@ -147,7 +147,7 @@ async function analyzeWallet(address) {
 
         const updateTotalsAndRender = () => {
             if (signal.aborted) return;
-            const { totV, totP, totChange24h } = calculateTotalVal(state.positions);
+            const { totV, totP, totChange24h, totChange1h } = calculateTotalVal(state.positions);
             state.positions.forEach(p => {
                 p.weight = totV > 0 ? ((p.currentValue || 0) / totV) * 100 : 0;
             });
@@ -165,6 +165,10 @@ async function analyzeWallet(address) {
             const total24hChangeEl = document.getElementById('total-24h-change');
             total24hChangeEl.className = `stat-value ${totChange24h >= 0 ? 'positive' : 'negative'}`;
             total24hChangeEl.innerText = `${totChange24h > 0 ? '+' : ''}${formatCurrency(totChange24h)}`;
+
+            const total1hChangeEl = document.getElementById('total-1h-change');
+            total1hChangeEl.className = `stat-value ${totChange1h >= 0 ? 'positive' : 'negative'}`;
+            total1hChangeEl.innerText = `${totChange1h > 0 ? '+' : ''}${formatCurrency(totChange1h)}`;
         };
 
         // Render immediately with current values

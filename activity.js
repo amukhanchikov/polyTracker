@@ -37,13 +37,8 @@ export async function fetchActivity(address, tradesList, elements, signal) {
         grossReceivedEl.innerText = `+${formatCurrency(localGrossReceived)}`;
         grossRedeemedEl.innerText = `+${formatCurrency(localGrossRedeemed)}`;
 
-        const netFlowEl = document.getElementById('net-flow');
-
         document.getElementById('net-liquidity').className = `value ${netLiquidity >= 0 ? 'positive' : 'negative'}`;
         document.getElementById('net-liquidity').innerText = `${netLiquidity > 0 ? '+' : ''}${formatCurrency(netLiquidity)}`;
-
-        netFlowEl.className = `stat-value ${netLiquidity >= 0 ? 'positive' : 'negative'}`;
-        netFlowEl.innerText = `${netLiquidity > 0 ? '+' : ''}${formatCurrency(netLiquidity)}`;
 
         // Render Recent Trades Fragment
         const tFrag = document.createDocumentFragment();

@@ -40,15 +40,18 @@ export function showSkeleton(tableWrapper) {
 }
 
 export function calculateTotalVal(currentPositionsData) {
-    let totV = 0; let totP = 0; let totChange24h = 0;
+    let totV = 0; let totP = 0; let totChange24h = 0; let totChange1h = 0;
     currentPositionsData.forEach(p => {
         totV += p.currentValue || 0;
         totP += p.cashPnl || 0;
         if (p.histPrice !== null) {
             totChange24h += (p.curPrice - p.histPrice) * p.size;
         }
+        if (p.hist1hPrice !== null) {
+            totChange1h += (p.curPrice - p.hist1hPrice) * p.size;
+        }
     });
-    return { totV, totP, totChange24h };
+    return { totV, totP, totChange24h, totChange1h };
 }
 
 function generateRowTemplate(p) {
