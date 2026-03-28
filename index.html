@@ -122,29 +122,25 @@
                     <!-- 24h Activity Summaries -->
                     <section class="glass-card activity-section">
                         <div class="section-header">
-                            <h2>24h Activity Rollup</h2>
+                            <h2>24h Activity Rollup<span id="activity-meta" class="activity-meta"></span></h2>
                         </div>
                         <div class="activity-summary">
                             <div class="activity-row">
-                                <span class="label">Gross Spent (BUYS)</span>
+                                <span class="label">Cash Out (Buys)</span>
                                 <span class="value negative" id="gross-spent">-$0.00</span>
                             </div>
                             <div class="activity-row">
-                                <span class="label">Gross Received (SELLS)</span>
-                                <span class="value positive" id="gross-received">+$0.00</span>
-                            </div>
-                            <div class="activity-row">
-                                <span class="label">Gross Redeemed</span>
-                                <span class="value positive" id="gross-redeemed">+$0.00</span>
+                                <span class="label">Cash In (Sells &amp; Redeems)</span>
+                                <span class="value positive" id="gross-cash-in">+$0.00</span>
                             </div>
                             <div class="divider"></div>
                             <div class="activity-row total">
-                                <span class="label">Net Liquidity Flow</span>
+                                <span class="label">Net Flow</span>
                                 <span class="value" id="net-liquidity">$0.00</span>
                             </div>
                         </div>
                         <div class="recent-trades">
-                            <h3>Latest Trades</h3>
+                            <h3>By Market</h3>
                             <ul id="trades-list">
                                 <!-- Populated by JS -->
                             </ul>

@@ -17,8 +17,7 @@ const freeUsdcEl = document.getElementById('free-usdc');
 const totalPnlEl = document.getElementById('total-pnl');
 const positionCountEl = document.getElementById('position-count');
 const grossSpentEl = document.getElementById('gross-spent');
-const grossReceivedEl = document.getElementById('gross-received');
-const grossRedeemedEl = document.getElementById('gross-redeemed');
+const grossCashInEl = document.getElementById('gross-cash-in');
 
 // Containers
 const tableWrapper = document.getElementById('table-wrapper');
@@ -103,7 +102,7 @@ async function analyzeWallet(address) {
     try {
         // Fetch Activity (Parallelized)
         const activityPromise = fetchActivity(address, tradesList, {
-            grossSpentEl, grossReceivedEl, grossRedeemedEl
+            grossSpentEl, grossCashInEl
         }, signal);
 
         // Fetch Positions

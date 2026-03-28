@@ -1,7 +1,7 @@
-import { formatCurrency, formatTime, escapeHtml, fetchWithTimeout, FETCH_TIMEOUT_MS } from './utils.js';
+import { formatCurrency, escapeHtml, fetchWithTimeout, FETCH_TIMEOUT_MS } from './utils.js';
 
 export async function fetchActivity(address, tradesList, elements, signal) {
-    const { grossSpentEl, grossReceivedEl, grossRedeemedEl } = elements;
+    const { grossSpentEl, grossCashInEl } = elements;
 
     try {
         const actRes = await fetchWithTimeout(
@@ -18,54 +18,84 @@ export async function fetchActivity(address, tradesList, elements, signal) {
         const redeems = recent.filter(a => a.type === 'REDEEM');
 
         let localGrossSpent = 0;
-        let localGrossReceived = 0;
-        let localGrossRedeemed = 0;
+        let localGrossCashIn = 0;
 
         trades.forEach(t => {
-            if (t.side === 'BUY') localGrossSpent += Number(t.usdcSize || 0);
-            if (t.side === 'SELL') localGrossReceived += Number(t.usdcSize || 0);
+            if (t.side === 'BUY')  localGrossSpent  += Number(t.usdcSize || 0);
+            if (t.side === 'SELL') localGrossCashIn += Number(t.usdcSize || 0);
         });
-
         redeems.forEach(r => {
-            localGrossRedeemed += Number(r.usdcValue || r.usdcSize || 0);
+            localGrossCashIn += Number(r.usdcValue || r.usdcSize || 0);
         });
 
-        const netLiquidity = (localGrossReceived + localGrossRedeemed) - localGrossSpent;
+        const netLiquidity = localGrossCashIn - localGrossSpent;
 
-        // UI Updates
-        grossSpentEl.innerText = `-${formatCurrency(localGrossSpent)}`;
-        grossReceivedEl.innerText = `+${formatCurrency(localGrossReceived)}`;
-        grossRedeemedEl.innerText = `+${formatCurrency(localGrossRedeemed)}`;
+        grossSpentEl.innerText  = `-${formatCurrency(localGrossSpent)}`;
+        grossCashInEl.innerText = `+${formatCurrency(localGrossCashIn)}`;
 
-        document.getElementById('net-liquidity').className = `value ${netLiquidity >= 0 ? 'positive' : 'negative'}`;
-        document.getElementById('net-liquidity').innerText = `${netLiquidity > 0 ? '+' : ''}${formatCurrency(netLiquidity)}`;
+        const netLiqEl = document.getElementById('net-liquidity');
+        netLiqEl.className = `value ${netLiquidity >= 0 ? 'positive' : 'negative'}`;
+        netLiqEl.innerText = `${netLiquidity > 0 ? '+' : ''}${formatCurrency(netLiquidity)}`;
 
-        // Render Recent Trades Fragment
+        // Group all activity by market title
+        const allActivity = [...trades, ...redeems];
+        const byMarket = new Map();
+        allActivity.forEach(a => {
+            const key = a.title || 'Unknown';
+            if (!byMarket.has(key)) {
+                byMarket.set(key, { title: key, items: [], totalOut: 0, totalIn: 0 });
+            }
+            const g = byMarket.get(key);
+            g.items.push(a);
+            if (a.type === 'TRADE' && a.side === 'BUY')  g.totalOut += Number(a.usdcSize || 0);
+            if (a.type === 'TRADE' && a.side === 'SELL')  g.totalIn  += Number(a.usdcSize || 0);
+            if (a.type === 'REDEEM') g.totalIn += Number(a.usdcValue || a.usdcSize || 0);
+        });
+
+        // Update header meta counter
+        const metaEl = document.getElementById('activity-meta');
+        if (metaEl) {
+            const total = trades.length + redeems.length;
+            const markets = byMarket.size;
+            metaEl.textContent = total > 0
+                ? `${total} trade${total !== 1 ? 's' : ''} · ${markets} market${markets !== 1 ? 's' : ''}`
+                : '';
+        }
+
+        // Render grouped list sorted by total volume desc
+        const groups = [...byMarket.values()]
+            .sort((a, b) => (b.totalOut + b.totalIn) - (a.totalOut + a.totalIn));
+
         const tFrag = document.createDocumentFragment();
         tradesList.innerHTML = '';
-        trades.slice(0, 10).forEach(t => {
-            const li = document.createElement('li');
-            li.className = 'trade-item';
-            const isBuy = t.side === 'BUY';
-            const tradePrice = t.price ? (parseFloat(t.price) * 100).toFixed(1) + '¢' : '';
 
+        groups.forEach(g => {
+            const net = g.totalIn - g.totalOut;
+            const isPositive = net >= 0;
+            const count = g.items.length;
+            const countLabel = count === 1 ? '1 trade' : `${count} trades`;
+            const hasRedeem = g.items.some(i => i.type === 'REDEEM');
+
+            const iconName  = hasRedeem ? 'trophy' : (isPositive ? 'arrow-up-right' : 'arrow-down-left');
+            const iconClass = hasRedeem ? 'redeem'  : (isPositive ? 'sell' : 'buy');
+
+            const li = document.createElement('li');
+            li.className = 'trade-item trade-group';
             li.innerHTML = `
-                <div class="trade-icon ${isBuy ? 'buy' : 'sell'}">
-                    <i data-lucide="${isBuy ? 'arrow-down-left' : 'arrow-up-right'}"></i>
+                <div class="trade-icon ${iconClass}">
+                    <i data-lucide="${iconName}"></i>
                 </div>
                 <div class="trade-details">
-                    <div class="top">
-                        <span>${isBuy ? 'Bought' : 'Sold'}</span>
-                        <span class="outcome-badge ${t.outcome ? escapeHtml(t.outcome.toLowerCase()) : ''}">${escapeHtml(t.outcome)} ${tradePrice}</span>
-                        <span>for</span>
-                        <strong>${formatCurrency(t.usdcSize)}</strong>
-                        <span class="trade-time">${formatTime(t.timestamp)}</span>
+                    <div class="trade-group-header">
+                        <span class="trade-market">${escapeHtml(g.title)}</span>
+                        <span class="trade-count">${countLabel}</span>
+                        <span class="trade-net ${isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${formatCurrency(net)}</span>
                     </div>
-                    <div class="market">${escapeHtml(t.title)}</div>
                 </div>
             `;
             tFrag.appendChild(li);
         });
+
         tradesList.appendChild(tFrag);
         if (window.lucide) window.lucide.createIcons({ attrs: {}, nameAttr: 'data-lucide', nodes: [tradesList] });
     } catch(e) {
