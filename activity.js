@@ -133,8 +133,8 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
                 <div class="trade-details">
                     <div class="trade-group-header">
                         ${g.eventSlug
-                            ? `<a href="https://polymarket.com/event/${encodeURIComponent(g.eventSlug)}" target="_blank" rel="noopener noreferrer" class="trade-market trade-market-link">${escapeHtml(g.title)}</a>`
-                            : `<span class="trade-market">${escapeHtml(g.title)}</span>`
+                            ? `<a href="https://polymarket.com/event/${encodeURIComponent(g.eventSlug)}" target="_blank" rel="noopener noreferrer" class="trade-market trade-market-link" title="${escapeHtml(g.title)}">${escapeHtml(g.title)}</a>`
+                            : `<span class="trade-market" title="${escapeHtml(g.title)}">${escapeHtml(g.title)}</span>`
                         }
                         <span class="trade-count">${countLabel}${isExpandable ? ' <i data-lucide="chevron-down" class="trade-chevron"></i>' : ''}</span>
                         <span class="trade-time">${groupTime}</span>

@@ -192,6 +192,15 @@ tbody tr:last-child td {
     margin-bottom: 0.25rem;
 }
 
+a.market-title-link {
+    color: inherit;
+    text-decoration: none;
+}
+a.market-title-link:hover {
+    text-decoration: underline;
+    color: var(--accent);
+}
+
 .sparkline {
     display: block;
     flex-shrink: 0;

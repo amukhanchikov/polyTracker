@@ -85,7 +85,7 @@ function generateRowTemplate(p, showWalletBadge) {
                         <div class="market-title-wrap">
                             ${showWalletBadge && p.walletColor ? `<span class="wallet-dot wallet-dot--row" style="background:${p.walletColor}" title="${escapeHtml(p.walletAddress || '')}"></span>` : ''}
                             ${p.marketUrl
-                                ? `<a href="${escapeHtml(p.marketUrl)}" target="_blank" rel="noopener noreferrer" class="market-title" title="${safeTitle}" style="color: inherit; text-decoration: none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${safeTitle}</a>`
+                                ? `<a href="${escapeHtml(p.marketUrl)}" target="_blank" rel="noopener noreferrer" class="market-title market-title-link" title="${safeTitle}">${safeTitle}</a>`
                                 : `<div class="market-title" title="${safeTitle}">${safeTitle}</div>`
                             }
                             <button class="edit-category-btn" title="Override Category"
