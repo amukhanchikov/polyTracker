@@ -125,10 +125,11 @@ tbody tr:last-child td {
 }
 
 .category-row td i, .category-row-icon {
-    width: 16px; 
+    width: 16px;
     height: 16px;
     margin-right: 8px;
     vertical-align: text-bottom;
+    flex-shrink: 0;
 }
 
 .rename-category-btn {
@@ -408,9 +409,9 @@ a.market-title-link:hover {
         table-layout: fixed;
     }
     /* Override JS-set inline widths with !important */
-    .positions-table th:nth-child(1) { width: 50% !important; }
-    .positions-table th:nth-child(5) { width: 23% !important; }
-    .positions-table th:nth-child(6) { width: 27% !important; }
+    .positions-table th:nth-child(1) { width: 46% !important; }
+    .positions-table th:nth-child(5) { width: 20% !important; }
+    .positions-table th:nth-child(6) { width: 34% !important; }
     .positions-table th,
     .positions-table td {
         padding: 0.65rem 0.5rem;
@@ -457,8 +458,9 @@ a.market-title-link:hover {
         flex-direction: column;
         align-items: flex-end;
     }
-    .value-main {
-        font-size: 0.85rem;
+    .value-cell-stack .value-main {
+        font-size: 0.72rem;
+        font-weight: 500;
         white-space: nowrap;
     }
     .value-sub {
@@ -479,7 +481,21 @@ a.market-title-link:hover {
         padding: 0.6rem 0.5rem;
         font-size: 0.75rem;
     }
+    .category-row .category-row-icon {
+        width: 14px;
+        height: 14px;
+        margin-right: 4px;
+    }
+    .category-label-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
     .cat-stat {
         font-size: 0.72rem;
+    }
+    /* Value column: ensure $ sign not clipped */
+    .positions-table td:nth-child(6) {
+        overflow: visible;
     }
 }
