@@ -361,15 +361,15 @@ a.market-title-link:hover {
     .table-controls {
         flex-direction: column;
         align-items: stretch;
-        gap: 0.6rem;
+        gap: 0.4rem;
     }
     .table-controls h2 {
-        font-size: 1rem;
+        font-size: 0.9rem;
     }
     .table-controls-right {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.35rem;
         width: 100%;
     }
     .position-search-wrap {
@@ -392,7 +392,7 @@ a.market-title-link:hover {
 
     /* Table: remove forced min-width, hide non-essential columns */
     .table-section {
-        padding: 0.75rem;
+        padding: 0.5rem;
         min-width: 0;
     }
     #table-wrapper {
@@ -409,41 +409,41 @@ a.market-title-link:hover {
         table-layout: fixed;
     }
     /* Override JS-set inline widths with !important */
-    .positions-table th:nth-child(1) { width: 46% !important; }
-    .positions-table th:nth-child(5) { width: 20% !important; }
-    .positions-table th:nth-child(6) { width: 34% !important; }
+    .positions-table th:nth-child(1) { width: 40% !important; }
+    .positions-table th:nth-child(4) { width: 15% !important; }
+    .positions-table th:nth-child(5) { width: 15% !important; }
+    .positions-table th:nth-child(6) { width: 30% !important; }
     .positions-table th,
     .positions-table td {
-        padding: 0.65rem 0.5rem;
+        padding: 0.5rem 0.4rem;
     }
 
-    /* Hide Cur.Price, Weight, 1h% — keep Market, 24h%, Value */
+    /* Hide Cur.Price, Weight — keep Market, 1h%, 24h%, Value */
     .positions-table th:nth-child(2),
     .positions-table td:nth-child(2),
     .positions-table th:nth-child(3),
-    .positions-table td:nth-child(3),
-    .positions-table th:nth-child(4),
-    .positions-table td:nth-child(4) {
+    .positions-table td:nth-child(3) {
         display: none;
     }
 
     /* Market cell: smaller image, tighter layout */
     .market-cell {
-        gap: 0.5rem;
+        gap: 0.4rem;
     }
     .market-img {
-        width: 28px;
-        height: 28px;
-        border-radius: 6px;
+        width: 24px;
+        height: 24px;
+        border-radius: 4px;
         flex-shrink: 0;
     }
     .market-title {
         max-width: 140px;
-        font-size: 0.8rem;
+        font-size: 0.78rem;
+        margin-bottom: 0.1rem;
     }
     .market-details {
-        font-size: 0.72rem;
-        gap: 0.3rem;
+        font-size: 0.68rem;
+        gap: 0.2rem;
     }
     .sparkline {
         display: none; /* Too small to be useful at this width */
@@ -466,20 +466,23 @@ a.market-title-link:hover {
     .value-sub {
         display: none;
     }
-    /* 24h% cell: right-align, no wrap, clip overflow */
+    /* 1h%, 24h%, Value cells: right-align, no wrap */
+    .positions-table td:nth-child(4),
     .positions-table td:nth-child(5),
     .positions-table td:nth-child(6) {
         overflow: hidden;
         white-space: nowrap;
     }
+    .positions-table td:nth-child(4),
     .positions-table td:nth-child(5) {
         text-align: right;
+        font-size: 0.7rem;
     }
 
     /* Category row: simplify */
     .category-row td {
-        padding: 0.6rem 0.5rem;
-        font-size: 0.75rem;
+        padding: 0.45rem 0.4rem;
+        font-size: 0.72rem;
     }
     .category-row .category-row-icon {
         width: 14px;
