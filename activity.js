@@ -89,7 +89,8 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
 
         groups.forEach(g => {
             const net = g.totalIn - g.totalOut;
-            const isPositive = net >= 0;
+            const isPositive = net > 0;
+            const isZero = net === 0;
             const count = g.items.length;
             const countLabel = count === 1 ? '1 trade' : `${count} trades`;
             const hasRedeem = g.items.some(i => i.type === 'REDEEM');
@@ -138,7 +139,7 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
                         }
                         <span class="trade-count">${countLabel}${isExpandable ? ' <i data-lucide="chevron-down" class="trade-chevron"></i>' : ''}</span>
                         <span class="trade-time">${groupTime}</span>
-                        <span class="trade-net ${isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${formatCurrency(net)}</span>
+                        <span class="trade-net ${isZero ? '' : isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${formatCurrency(net)}</span>
                     </div>
                     ${isExpandable ? `<div class="trade-sub-list">${subRowsHTML}</div>` : ''}
                 </div>
