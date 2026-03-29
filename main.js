@@ -522,6 +522,30 @@ groupToggle.addEventListener('change', () => {
 });
 
 // ===========================
+//   LONG-PRESS FOR MOBILE CATEGORY EDIT
+// ===========================
+let longPressTimer = null;
+tableWrapper.addEventListener('touchstart', (e) => {
+    const marketCell = e.target.closest('.market-cell');
+    if (!marketCell) return;
+    const editBtn = marketCell.querySelector('[data-action="edit-category"]');
+    if (!editBtn) return;
+    longPressTimer = setTimeout(() => {
+        longPressTimer = null;
+        const conditionId = decodeURIComponent(editBtn.dataset.condition || '');
+        const title = editBtn.dataset.title || '';
+        const currentCat = editBtn.dataset.cat || '';
+        openCategoryModal(conditionId, title, currentCat);
+    }, 500);
+}, { passive: true });
+tableWrapper.addEventListener('touchend', () => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+}, { passive: true });
+tableWrapper.addEventListener('touchmove', () => {
+    if (longPressTimer) { clearTimeout(longPressTimer); longPressTimer = null; }
+}, { passive: true });
+
+// ===========================
 //   TABLE ACTION DELEGATION
 // ===========================
 document.addEventListener('click', (e) => {
