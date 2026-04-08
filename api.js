@@ -132,6 +132,7 @@ export async function getHistoricalMetrics(assetId, signal) {
             const sparkline = sparkRaw.length >= 2 ? sparkRaw.map(e => e.p) : null;
 
             return {
+                latestPrice,
                 pct24h: histPrice24h !== null && histPrice24h > 0 ? ((latestPrice - histPrice24h) / histPrice24h) * 100 : null,
                 price24h: histPrice24h,
                 time24h: histTime24h,

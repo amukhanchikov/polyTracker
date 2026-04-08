@@ -316,6 +316,14 @@ async function loadWalletData(wallet, { bypassCache = false } = {}) {
             }
 
             if (histData && !signal.aborted) {
+                if (histData.latestPrice != null) {
+                    p.curPrice = histData.latestPrice;
+                    p.currentValue = p.curPrice * (parseFloat(p.size) || 0);
+                    const entryPrice = parseFloat(p.avgPrice) || 0;
+                    const cost = entryPrice * (parseFloat(p.size) || 0);
+                    p.cashPnl = p.currentValue - cost;
+                    p.roi = entryPrice > 0 ? ((p.curPrice - entryPrice) / entryPrice) * 100 : 0;
+                }
                 p.histPrice = histData.price24h;
                 p.histTime = histData.time24h;
                 p.hist1hPrice = histData.price1h;
