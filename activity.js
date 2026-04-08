@@ -101,6 +101,20 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
             const newestTs = Math.max(...g.items.map(i => Number(i.timestamp) || 0));
             const groupTime = formatTime(newestTs);
 
+            // Single-trade detail line (shown inline, no expand needed)
+            let singleDetail = '';
+            if (count === 1) {
+                const item = g.items[0];
+                const parts = [];
+                if (item.outcome) parts.push(escapeHtml(item.outcome));
+                if (item.price && item.size) {
+                    parts.push(`${(item.price * 100).toFixed(1)}¢ × ${parseFloat(item.size).toLocaleString('en-US', { maximumFractionDigits: 0 })}`);
+                } else if (item.size && item.type === 'REDEEM') {
+                    parts.push(`${parseFloat(item.size).toLocaleString('en-US', { maximumFractionDigits: 0 })} shares`);
+                }
+                if (parts.length) singleDetail = `<div class="trade-single-detail">${parts.join(' · ')}</div>`;
+            }
+
             // Build sub-rows for individual trades
             const subRowsHTML = g.items
                 .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
@@ -114,12 +128,16 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
                     const amtClass = isBuy ? 'negative' : 'positive';
                     const outcome  = escapeHtml(item.outcome || '');
                     const time     = formatTime(item.timestamp);
+                    const priceCents = item.price ? (item.price * 100).toFixed(1) + '¢' : '';
+                    const shares = item.size ? parseFloat(item.size).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '';
+                    const detail = priceCents && shares ? `${priceCents} × ${shares}` : (isRedeem && shares ? `${shares} sh` : '');
                     return `
                         <div class="trade-sub-row">
                             <div class="trade-icon trade-icon--sm ${subClass}">
                                 <i data-lucide="${subIcon}"></i>
                             </div>
                             <span class="trade-sub-outcome">${outcome}</span>
+                            ${detail ? `<span class="trade-sub-detail">${detail}</span>` : ''}
                             <span class="trade-sub-time">${time}</span>
                             <span class="trade-sub-amount ${amtClass}">${sign}${formatCurrency(amount)}</span>
                         </div>`;
@@ -141,6 +159,7 @@ export async function fetchActivity(addresses, tradesList, elements, signal) {
                         <span class="trade-time">${groupTime}</span>
                         <span class="trade-net ${isZero ? '' : isPositive ? 'positive' : 'negative'}">${isPositive ? '+' : ''}${formatCurrency(net)}</span>
                     </div>
+                    ${singleDetail}
                     ${isExpandable ? `<div class="trade-sub-list">${subRowsHTML}</div>` : ''}
                 </div>
             `;
